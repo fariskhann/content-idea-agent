@@ -33,6 +33,18 @@ async function googleGet(path: string, params: Record<string, string>) {
   return data;
 }
 
+/** Shorts have no dedicated Data API flag — duration under a minute is the standard heuristic third-party tools use. */
+const SHORTS_MAX_SECONDS = 60;
+
+function parseDurationSeconds(iso: string): number {
+  const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+  const h = parseInt(match[1] || "0", 10);
+  const m = parseInt(match[2] || "0", 10);
+  const s = parseInt(match[3] || "0", 10);
+  return h * 3600 + m * 60 + s;
+}
+
 export async function GET(req: NextRequest) {
   const apiKey = req.nextUrl.searchParams.get("apiKey") || "";
   const ref = req.nextUrl.searchParams.get("ref") || "";
@@ -96,39 +108,57 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Couldn't find that YouTube channel. Check the link or handle." }, { status: 404 });
     }
 
-    const playlistData = await googleGet("playlistItems", {
-      part: "contentDetails",
-      playlistId: uploadsPlaylistId,
-      maxResults: String(maxResults),
-      key: apiKey,
-    });
-    const videoIds: string[] = (playlistData.items || []).map((it: { contentDetails: { videoId: string } }) => it.contentDetails.videoId).filter(Boolean);
+    const PLAYLIST_PAGE_SIZE = 50;
+    const MAX_PAGES = 5; // bounds quota usage on channels that are mostly Shorts
 
-    if (!videoIds.length) {
-      return NextResponse.json({ channelId, channelTitle, videos: [] });
+    const videos: { id: string; title: string; thumbnail: string; viewCount: number; publishedAt: string }[] = [];
+    let pageToken: string | undefined;
+    let pages = 0;
+
+    while (videos.length < maxResults && pages < MAX_PAGES) {
+      const playlistData: { items?: { contentDetails: { videoId: string } }[]; nextPageToken?: string } = await googleGet("playlistItems", {
+        part: "contentDetails",
+        playlistId: uploadsPlaylistId,
+        maxResults: String(PLAYLIST_PAGE_SIZE),
+        key: apiKey,
+        ...(pageToken ? { pageToken } : {}),
+      });
+      pages++;
+
+      const pageVideoIds: string[] = (playlistData.items || []).map((it) => it.contentDetails.videoId).filter(Boolean);
+      if (!pageVideoIds.length) break;
+
+      const videosData = await googleGet("videos", { part: "snippet,statistics,contentDetails", id: pageVideoIds.join(","), key: apiKey });
+      const byId = new Map<string, { id: string; title: string; thumbnail: string; viewCount: number; publishedAt: string; durationSeconds: number }>();
+      (videosData.items || []).forEach(
+        (item: {
+          id: string;
+          snippet: { title: string; publishedAt: string; thumbnails?: { medium?: { url: string }; default?: { url: string } } };
+          statistics?: { viewCount?: string };
+          contentDetails?: { duration?: string };
+        }) => {
+          byId.set(item.id, {
+            id: item.id,
+            title: item.snippet.title,
+            thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url || "",
+            viewCount: parseInt(item.statistics?.viewCount || "0", 10),
+            publishedAt: item.snippet.publishedAt,
+            durationSeconds: parseDurationSeconds(item.contentDetails?.duration || "PT0S"),
+          });
+        }
+      );
+      // Preserve upload order (most recent first), not the videos.list response order.
+      pageVideoIds
+        .map((id) => byId.get(id))
+        .filter((v): v is NonNullable<typeof v> => !!v)
+        .filter((v) => v.durationSeconds > SHORTS_MAX_SECONDS)
+        .forEach((v) => videos.push({ id: v.id, title: v.title, thumbnail: v.thumbnail, viewCount: v.viewCount, publishedAt: v.publishedAt }));
+
+      pageToken = playlistData.nextPageToken;
+      if (!pageToken) break;
     }
 
-    const videosData = await googleGet("videos", { part: "snippet,statistics", id: videoIds.join(","), key: apiKey });
-    const byId = new Map<string, { id: string; title: string; thumbnail: string; viewCount: number; publishedAt: string }>();
-    (videosData.items || []).forEach(
-      (item: {
-        id: string;
-        snippet: { title: string; publishedAt: string; thumbnails?: { medium?: { url: string }; default?: { url: string } } };
-        statistics?: { viewCount?: string };
-      }) => {
-        byId.set(item.id, {
-          id: item.id,
-          title: item.snippet.title,
-          thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url || "",
-          viewCount: parseInt(item.statistics?.viewCount || "0", 10),
-          publishedAt: item.snippet.publishedAt,
-        });
-      }
-    );
-    // Preserve upload order (most recent first), not the videos.list response order.
-    const videos = videoIds.map((id) => byId.get(id)).filter((v): v is NonNullable<typeof v> => !!v);
-
-    return NextResponse.json({ channelId, channelTitle, videos });
+    return NextResponse.json({ channelId, channelTitle, videos: videos.slice(0, maxResults) });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to fetch channel videos." }, { status: 500 });
   }

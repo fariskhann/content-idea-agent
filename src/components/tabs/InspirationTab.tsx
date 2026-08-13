@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
-import { chipStyle, muted, pageSubtitle, pageTitle, primaryBtn, removeBtn } from "@/lib/styles";
+import { chipStyle, muted, pageSubtitle, pageTitle, primaryBtn, removeBtn, secondaryBtn } from "@/lib/styles";
 import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt } from "@/lib/youtube";
@@ -14,7 +14,7 @@ function fmtViews(n: number): string {
   return String(n);
 }
 
-function YoutubePanel({ insp }: { insp: Inspiration }) {
+function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: () => void }) {
   const app = useApp();
   const [count, setCount] = useState(DEFAULT_VIDEO_COUNT);
   const [fetching, setFetching] = useState(false);
@@ -111,78 +111,126 @@ function YoutubePanel({ insp }: { insp: Inspiration }) {
   }
 
   return (
-    <div style={{ borderTop: `1px solid ${muted(25)}`, marginTop: 4, paddingTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>Last</span>
-        <input
-          type="number"
-          min={1}
-          max={MAX_VIDEO_COUNT}
-          value={count}
-          onChange={(e) => setCount(Math.min(MAX_VIDEO_COUNT, Math.max(1, parseInt(e.target.value, 10) || 1)))}
-          style={{ width: 52, border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 12, color: "var(--color-text)", padding: "5px 6px" }}
-        />
-        <span style={{ fontSize: 11, color: muted(55) }}>videos (max {MAX_VIDEO_COUNT})</span>
-        <button
-          onClick={handleFetch}
-          disabled={fetching}
-          style={{ border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
-        >
-          {fetching ? "Fetching…" : videos.length ? "Refresh videos" : "Fetch videos"}
-        </button>
-        {videos.length > 0 && (
-          <button
-            onClick={handleAnalyze}
-            disabled={analyzing}
-            style={{ border: "1px solid var(--color-accent)", background: "var(--color-accent)", color: "var(--color-bg)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
-          >
-            {analyzing ? "Analyzing…" : "Analyze outliers"}
+    <div
+      style={{ position: "fixed", inset: 0, display: "grid", placeItems: "center", padding: 16, background: "color-mix(in srgb, var(--color-neutral-900) 50%, transparent)", zIndex: 50 }}
+      onClick={onClose}
+    >
+      <div
+        style={{ width: "min(760px, 100%)", maxHeight: "88vh", display: "flex", flexDirection: "column", gap: 14, padding: 24, background: "var(--color-bg)", border: "2px solid var(--color-divider)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div>
+            <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>{insp.name || insp.handle || "YouTube channel"}</h2>
+            <p style={{ fontSize: 12, color: muted(55), margin: 0 }}>Shorts are excluded — only regular uploads are pulled and scored.</p>
+          </div>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", color: muted(50), cursor: "pointer", fontSize: 20, lineHeight: 1 }}>
+            ×
           </button>
-        )}
-      </div>
-
-      {error && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{error}</div>}
-
-      {videos.length > 0 && (
-        <div style={{ fontSize: 11, color: muted(55) }}>
-          Median views this batch: {fmtViews(medianViews)} · {outliers.length} outlier{outliers.length === 1 ? "" : "s"} flagged (≥1.75× median)
         </div>
-      )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {videos.map((v) => {
-          const isOutlier = outlierIds.has(v.id);
-          const analysis = analysisById.get(v.id);
-          return (
-            <div key={v.id} style={{ display: "flex", gap: 8, background: "var(--color-bg)", padding: 8, border: isOutlier ? "1px solid var(--color-accent)" : `1px solid ${muted(15)}` }}>
-              {v.thumbnail && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={v.thumbnail} alt="" width={96} height={54} style={{ objectFit: "cover", flexShrink: 0 }} className="grayscale" />
-              )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)" }}>{v.title}</span>
-                  {isOutlier && <span style={{ fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "1px 6px" }}>Outlier</span>}
-                </div>
-                <div style={{ fontSize: 11, color: muted(55) }}>
-                  {fmtViews(v.viewCount)} views · {new Date(v.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                  {v.transcriptStatus === "unavailable" && " · no transcript available"}
-                </div>
-                {analysis && (
-                  <div style={{ fontSize: 12, color: "var(--color-text)", marginTop: 2 }}>
-                    <div>
-                      <strong>Why it worked:</strong> {analysis.why}
-                    </div>
-                    <div>
-                      <strong>What to borrow:</strong> {analysis.borrow}
-                    </div>
-                  </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>Last</span>
+          <input
+            type="number"
+            min={1}
+            max={MAX_VIDEO_COUNT}
+            value={count}
+            onChange={(e) => setCount(Math.min(MAX_VIDEO_COUNT, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+            style={{ width: 52, border: `1px solid ${muted(25)}`, background: "var(--color-surface)", fontSize: 12, color: "var(--color-text)", padding: "5px 6px" }}
+          />
+          <span style={{ fontSize: 11, color: muted(55) }}>videos (max {MAX_VIDEO_COUNT})</span>
+          <button
+            onClick={handleFetch}
+            disabled={fetching}
+            style={{ border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            {fetching ? "Fetching…" : videos.length ? "Refresh videos" : "Fetch videos"}
+          </button>
+          {videos.length > 0 && (
+            <button
+              onClick={handleAnalyze}
+              disabled={analyzing}
+              style={{ border: "1px solid var(--color-accent)", background: "var(--color-accent)", color: "var(--color-bg)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+            >
+              {analyzing ? "Analyzing…" : "Analyze outliers"}
+            </button>
+          )}
+        </div>
+
+        {error && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{error}</div>}
+
+        {videos.length > 0 && (
+          <div style={{ fontSize: 11, color: muted(55) }}>
+            Median views this batch: {fmtViews(medianViews)} · {outliers.length} outlier{outliers.length === 1 ? "" : "s"} flagged (≥1.75× median)
+          </div>
+        )}
+
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, paddingRight: 2 }}>
+          {videos.length === 0 && !fetching && (
+            <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: muted(50), border: `1px solid ${muted(15)}` }}>No videos fetched yet.</div>
+          )}
+          {videos.map((v) => {
+            const isOutlier = outlierIds.has(v.id);
+            const analysis = analysisById.get(v.id);
+            return (
+              <div key={v.id} style={{ display: "flex", gap: 10, background: "var(--color-surface)", padding: 10, border: isOutlier ? "1px solid var(--color-accent)" : `1px solid ${muted(15)}` }}>
+                {v.thumbnail && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={v.thumbnail} alt="" width={120} height={68} style={{ objectFit: "cover", flexShrink: 0 }} className="grayscale" />
                 )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text)" }}>{v.title}</span>
+                    {isOutlier && <span style={{ fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "1px 6px" }}>Outlier</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: muted(55) }}>
+                    {fmtViews(v.viewCount)} views · {new Date(v.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    {v.transcriptStatus === "unavailable" && " · no transcript available"}
+                  </div>
+                  {analysis && (
+                    <div style={{ fontSize: 12, color: "var(--color-text)", marginTop: 2 }}>
+                      <div>
+                        <strong>Why it worked:</strong> {analysis.why}
+                      </div>
+                      <div>
+                        <strong>What to borrow:</strong> {analysis.borrow}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+          <button style={secondaryBtn} onClick={onClose}>
+            Close
+          </button>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function YoutubePanel({ insp }: { insp: Inspiration }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const videos = insp.youtubeVideos || [];
+  const { outliers } = computeOutliers(videos);
+
+  return (
+    <div style={{ borderTop: `1px solid ${muted(25)}`, marginTop: 4, paddingTop: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+      <span style={{ fontSize: 11, color: muted(55) }}>
+        {videos.length > 0 ? `${videos.length} videos loaded · ${outliers.length} outlier${outliers.length === 1 ? "" : "s"}` : "No videos fetched yet"}
+      </span>
+      <button
+        onClick={() => setDialogOpen(true)}
+        style={{ border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+      >
+        {videos.length > 0 ? "View videos" : "Fetch videos"}
+      </button>
+      {dialogOpen && <YoutubeVideosDialog insp={insp} onClose={() => setDialogOpen(false)} />}
     </div>
   );
 }
