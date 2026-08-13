@@ -6,12 +6,24 @@ export interface Settings {
   anthropicApiKey: string;
   deepseekApiKey: string;
   youtubeApiKey: string;
+  /** The key actually used for transcript calls. */
   supadataApiKey: string;
-  /** Day of month (1-28) Supadata's free-tier credits renew — used only to estimate the local usage counter. */
+  /** Day of month (1-28) this key's plan renews — used only to estimate the local usage counter. */
   supadataResetDay: number;
+  /** A second Supadata key (separate account) kept on standby — swap it into the primary slot via Settings. Never used for calls while in this slot. */
+  supadataBackupApiKey: string;
+  supadataBackupResetDay: number;
 }
 
-const empty: Settings = { anthropicApiKey: "", deepseekApiKey: "", youtubeApiKey: "", supadataApiKey: "", supadataResetDay: 0 };
+const empty: Settings = {
+  anthropicApiKey: "",
+  deepseekApiKey: "",
+  youtubeApiKey: "",
+  supadataApiKey: "",
+  supadataResetDay: 0,
+  supadataBackupApiKey: "",
+  supadataBackupResetDay: 0,
+};
 
 export function loadSettings(): Settings {
   if (typeof window === "undefined") return empty;

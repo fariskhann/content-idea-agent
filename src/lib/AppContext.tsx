@@ -14,7 +14,7 @@ import {
 import { complete, parseJsonArray } from "./ai";
 import { getModel, costUsd } from "./models";
 import { loadUsageLog, saveUsageLog, type UsageLogEntry } from "./usage";
-import { loadTranscriptLog, saveTranscriptLog } from "./transcriptUsage";
+import { loadTranscriptLog, saveTranscriptLog, loadTranscriptBackupLog, saveTranscriptBackupLog } from "./transcriptUsage";
 import type {
   AppData,
   Category,
@@ -55,6 +55,7 @@ interface AppState {
   usageLog: UsageLogEntry[];
   usageDialogOpen: boolean;
   transcriptLog: number[];
+  transcriptBackupLog: number[];
 }
 
 function initialAppState(): AppState {
@@ -74,11 +75,20 @@ function initialAppState(): AppState {
     expandedCategoryIds: {},
     genFormatChecks: {},
     genStructureChecks: {},
-    settings: { anthropicApiKey: "", deepseekApiKey: "", youtubeApiKey: "", supadataApiKey: "", supadataResetDay: 0 },
+    settings: {
+      anthropicApiKey: "",
+      deepseekApiKey: "",
+      youtubeApiKey: "",
+      supadataApiKey: "",
+      supadataResetDay: 0,
+      supadataBackupApiKey: "",
+      supadataBackupResetDay: 0,
+    },
     settingsOpen: false,
     usageLog: [],
     usageDialogOpen: false,
     transcriptLog: [],
+    transcriptBackupLog: [],
   };
 }
 
@@ -102,7 +112,13 @@ function useAppStore() {
     } catch {
       // ignore corrupt storage
     }
-    setState((s) => ({ ...s, settings: loadSettings(), usageLog: loadUsageLog(), transcriptLog: loadTranscriptLog() }));
+    setState((s) => ({
+      ...s,
+      settings: loadSettings(),
+      usageLog: loadUsageLog(),
+      transcriptLog: loadTranscriptLog(),
+      transcriptBackupLog: loadTranscriptBackupLog(),
+    }));
     setHydrated(true);
   }, []);
 
@@ -513,16 +529,38 @@ function useAppStore() {
   const updateSettings = useCallback((patch: Partial<Settings>) => {
     setState((s) => {
       const settings = { ...s.settings, ...patch };
-      // First time a Supadata key is saved, anchor the free-tier reset estimate to today —
-      // the user can correct it in Settings once they know their actual Supadata billing date.
+      // First time a Supadata key is saved, anchor its free-tier reset estimate to today —
+      // the user can correct it in Settings once they know the account's actual billing date.
       if (patch.supadataApiKey && !s.settings.supadataApiKey && !settings.supadataResetDay) {
         settings.supadataResetDay = Math.min(new Date().getDate(), 28);
+      }
+      if (patch.supadataBackupApiKey && !s.settings.supadataBackupApiKey && !settings.supadataBackupResetDay) {
+        settings.supadataBackupResetDay = Math.min(new Date().getDate(), 28);
       }
       saveSettings(settings);
       return { ...s, settings };
     });
   }, []);
   const setSettingsOpen = useCallback((open: boolean) => setState((s) => ({ ...s, settingsOpen: open })), []);
+
+  /** Swaps the primary and backup Supadata keys, along with their reset-day settings and usage logs — the log always stays attached to its actual key, and only the primary key is ever used for calls. */
+  const swapSupadataKeys = useCallback(() => {
+    setState((s) => {
+      const settings: Settings = {
+        ...s.settings,
+        supadataApiKey: s.settings.supadataBackupApiKey,
+        supadataBackupApiKey: s.settings.supadataApiKey,
+        supadataResetDay: s.settings.supadataBackupResetDay,
+        supadataBackupResetDay: s.settings.supadataResetDay,
+      };
+      saveSettings(settings);
+      const transcriptLog = s.transcriptBackupLog;
+      const transcriptBackupLog = s.transcriptLog;
+      saveTranscriptLog(transcriptLog);
+      saveTranscriptBackupLog(transcriptBackupLog);
+      return { ...s, settings, transcriptLog, transcriptBackupLog };
+    });
+  }, []);
 
   // ---- youtube inspiration ----
   const updateInspirationYoutube = useCallback(
@@ -585,6 +623,7 @@ function useAppStore() {
     importJSON,
     updateSettings,
     setSettingsOpen,
+    swapSupadataKeys,
     updateInspirationYoutube,
     logUsage,
     clearUsage,

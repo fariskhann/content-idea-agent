@@ -1,15 +1,16 @@
 "use client";
 
 const STORAGE_KEY = "cia_transcript_usage_v1";
+const BACKUP_STORAGE_KEY = "cia_transcript_usage_backup_v1";
 const MAX_ENTRIES = 1000;
 
 /** Supadata's free tier as of writing — see Settings for where this is surfaced. */
 export const SUPADATA_FREE_TIER_LIMIT = 100;
 
-export function loadTranscriptLog(): number[] {
+function loadLog(key: string): number[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -18,12 +19,28 @@ export function loadTranscriptLog(): number[] {
   }
 }
 
-export function saveTranscriptLog(log: number[]) {
+function saveLog(key: string, log: number[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(log.slice(-MAX_ENTRIES)));
+    localStorage.setItem(key, JSON.stringify(log.slice(-MAX_ENTRIES)));
   } catch {
     // ignore quota errors
   }
+}
+
+export function loadTranscriptLog(): number[] {
+  return loadLog(STORAGE_KEY);
+}
+
+export function saveTranscriptLog(log: number[]) {
+  saveLog(STORAGE_KEY, log);
+}
+
+export function loadTranscriptBackupLog(): number[] {
+  return loadLog(BACKUP_STORAGE_KEY);
+}
+
+export function saveTranscriptBackupLog(log: number[]) {
+  saveLog(BACKUP_STORAGE_KEY, log);
 }
 
 export interface SupadataUsageSummary {

@@ -5,11 +5,62 @@ import { input, kicker, muted, primaryBtn, secondaryBtn } from "@/lib/styles";
 import { MODELS, providerLabel } from "@/lib/models";
 import { computeSupadataUsage } from "@/lib/transcriptUsage";
 
+function SupadataKeyField({
+  label,
+  hint,
+  value,
+  resetDay,
+  log,
+  onChangeKey,
+  onChangeResetDay,
+  inputId,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  resetDay: number;
+  log: number[];
+  onChangeKey: (v: string) => void;
+  onChangeResetDay: (v: number) => void;
+  inputId: string;
+}) {
+  const usage = computeSupadataUsage(log, resetDay);
+  return (
+    <div>
+      <div style={kicker}>{label}</div>
+      <input type="password" value={value} onChange={(e) => onChangeKey(e.target.value)} placeholder="sd_..." style={input} />
+      <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>{hint}</div>
+      {value && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 8, padding: "8px 10px", background: "var(--color-surface)" }}>
+          <div style={{ fontSize: 12 }}>
+            <strong>
+              {usage.used} / {usage.limit}
+            </strong>{" "}
+            transcripts used this cycle · resets in {usage.daysUntilReset}d ({usage.resetDate.toLocaleDateString()})
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+            <label htmlFor={inputId} style={{ fontSize: 11, color: muted(55) }}>
+              Renews on day
+            </label>
+            <input
+              id={inputId}
+              type="number"
+              min={1}
+              max={28}
+              value={resetDay || 1}
+              onChange={(e) => onChangeResetDay(Math.min(Math.max(Number(e.target.value) || 1, 1), 28))}
+              style={{ ...input, width: 56, padding: "4px 6px" }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SettingsDialog() {
   const app = useApp();
   if (!app.settingsOpen) return null;
-
-  const supadataUsage = computeSupadataUsage(app.transcriptLog, app.settings.supadataResetDay);
 
   return (
     <div
@@ -17,7 +68,17 @@ export function SettingsDialog() {
       onClick={() => app.setSettingsOpen(false)}
     >
       <div
-        style={{ width: "min(480px, 100%)", display: "flex", flexDirection: "column", gap: 16, padding: 24, background: "var(--color-bg)", border: "2px solid var(--color-divider)" }}
+        style={{
+          width: "min(480px, 100%)",
+          maxHeight: "85vh",
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+          padding: 24,
+          background: "var(--color-bg)",
+          border: "2px solid var(--color-divider)",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div>
@@ -84,45 +145,40 @@ export function SettingsDialog() {
           </div>
         </div>
 
-        <div>
-          <div style={kicker}>Supadata API key</div>
-          <input
-            type="password"
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, border: `1px solid ${muted(20)}` }}>
+          <SupadataKeyField
+            label="Supadata API key (primary)"
+            hint="Used to fetch video transcripts for analysis in Inspiration — only this key is ever called."
             value={app.settings.supadataApiKey}
-            onChange={(e) => app.updateSettings({ supadataApiKey: e.target.value })}
-            placeholder="sd_..."
-            style={input}
+            resetDay={app.settings.supadataResetDay}
+            log={app.transcriptLog}
+            onChangeKey={(v) => app.updateSettings({ supadataApiKey: v })}
+            onChangeResetDay={(v) => app.updateSettings({ supadataResetDay: v })}
+            inputId="supadata-reset-day"
           />
-          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
-            Used to fetch video transcripts for analysis in Inspiration. Free tier: {supadataUsage.limit}/month.
-          </div>
-          {app.settings.supadataApiKey && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 8, padding: "8px 10px", background: "var(--color-surface)" }}>
-              <div style={{ fontSize: 12 }}>
-                <strong>
-                  {supadataUsage.used} / {supadataUsage.limit}
-                </strong>{" "}
-                transcripts used this cycle · resets in {supadataUsage.daysUntilReset}d ({supadataUsage.resetDate.toLocaleDateString()})
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-                <label htmlFor="supadata-reset-day" style={{ fontSize: 11, color: muted(55) }}>
-                  Renews on day
-                </label>
-                <input
-                  id="supadata-reset-day"
-                  type="number"
-                  min={1}
-                  max={28}
-                  value={app.settings.supadataResetDay || 1}
-                  onChange={(e) => app.updateSettings({ supadataResetDay: Math.min(Math.max(Number(e.target.value) || 1, 1), 28) })}
-                  style={{ ...input, width: 56, padding: "4px 6px" }}
-                />
-              </div>
-            </div>
-          )}
-          <div style={{ fontSize: 11, color: muted(50), marginTop: 4 }}>
-            This count is tracked locally as an estimate — Supadata doesn&apos;t expose a usage API. Set &quot;renews on day&quot; to match your actual
-            billing date from the Supadata dashboard for accuracy.
+
+          <button
+            onClick={app.swapSupadataKeys}
+            title="Swaps the primary and backup keys, along with each one's own usage tracking"
+            style={{ ...secondaryBtn, alignSelf: "flex-start", fontSize: 12, padding: "6px 12px" }}
+          >
+            ⇄ Swap primary / backup
+          </button>
+
+          <SupadataKeyField
+            label="Supadata API key (backup)"
+            hint="A second account kept on standby. Not used for calls until you swap it into the primary slot above."
+            value={app.settings.supadataBackupApiKey}
+            resetDay={app.settings.supadataBackupResetDay}
+            log={app.transcriptBackupLog}
+            onChangeKey={(v) => app.updateSettings({ supadataBackupApiKey: v })}
+            onChangeResetDay={(v) => app.updateSettings({ supadataBackupResetDay: v })}
+            inputId="supadata-backup-reset-day"
+          />
+
+          <div style={{ fontSize: 11, color: muted(50) }}>
+            Usage counts are tracked locally as an estimate — Supadata doesn&apos;t expose a usage API. Set &quot;renews on day&quot; to match each
+            account&apos;s actual billing date for accuracy.
           </div>
         </div>
 
