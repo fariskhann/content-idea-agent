@@ -55,8 +55,8 @@ export type AnalysisField = string | Record<string, unknown>;
 
 export interface YoutubeOutlierResult {
   videoId: string;
-  why: AnalysisField;
-  borrow: AnalysisField;
+  /** Arbitrary key -> analysis content, shaped entirely by the user's custom Analysis instructions (no fixed "why"/"borrow" schema). */
+  fields: Record<string, AnalysisField>;
 }
 
 export interface YoutubeAnalysis {

@@ -171,7 +171,7 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
         outputTokens: usage.outputTokens,
         costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
       });
-      const parsed = parseJsonArray(text) as { videoId?: string; why?: AnalysisFieldType; borrow?: AnalysisFieldType }[] | null;
+      const parsed = parseJsonArray(text) as Record<string, unknown>[] | null;
       if (!parsed || !parsed.length) {
         console.error("YouTube analysis: failed to parse model response as JSON array. Raw response:", text);
         const looksTruncated = text.trim().length > 0 && !text.trim().endsWith("]") && !text.trim().endsWith("}");
@@ -181,7 +181,10 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
         const snippet = text.length > 300 ? text.slice(0, 300) + "…" : text;
         throw new Error(`Unexpected response format — model didn't return valid JSON. Raw response: "${snippet}"`);
       }
-      const results: YoutubeOutlierResult[] = parsed.map((p) => ({ videoId: p.videoId || "", why: p.why || "", borrow: p.borrow || "" }));
+      const results: YoutubeOutlierResult[] = parsed.map((p) => {
+        const { videoId, ...fields } = p;
+        return { videoId: typeof videoId === "string" ? videoId : "", fields: fields as Record<string, AnalysisFieldType> };
+      });
       app.updateInspirationYoutube(insp.id, { youtubeAnalysis: { generatedAt: Date.now(), avgViews, results } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed — try again.");
@@ -314,12 +317,11 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
                   )}
                   {analysis && (
                     <div style={{ fontSize: 12, color: "var(--color-text)", marginTop: 2 }}>
-                      <div>
-                        <strong>Why it worked:</strong> <AnalysisFieldView value={analysis.why} />
-                      </div>
-                      <div>
-                        <strong>What to borrow:</strong> <AnalysisFieldView value={analysis.borrow} />
-                      </div>
+                      {Object.entries(analysis.fields || {}).map(([key, value]) => (
+                        <div key={key}>
+                          <strong>{labelFromKey(key)}:</strong> <AnalysisFieldView value={value} />
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

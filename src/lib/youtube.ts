@@ -87,14 +87,14 @@ export function buildYoutubeAnalysisPrompt(
     const names = taggedCategories.map((c) => c.name).join(", ");
     const formats = taggedCategories.flatMap((c) => c.angles.map((a) => a.name)).filter(Boolean).join(", ");
     prompt += `This creator is tagged under our "${names}" content type${taggedCategories.length > 1 ? "s" : ""} here.${
-      formats ? ` Default the "borrow" suggestion to one of that type's formats (${formats})` : " Default the \"borrow\" suggestion to that content type"
+      formats ? ` Default any "what to borrow/adapt" guidance to one of that type's formats (${formats})` : ` Default any "what to borrow/adapt" guidance to that content type`
     } unless another of our content types is a clearly better fit for a specific video.\n\n`;
   }
-  if (hooksText) prompt += `Where a video's hook style maps onto one of our own hook formulas above, name that formula specifically in "borrow" instead of describing it generically.\n\n`;
+  if (hooksText) prompt += `Where a video's hook style maps onto one of our own hook formulas above, name that formula specifically wherever you describe what to borrow/adapt, instead of describing it generically.\n\n`;
   prompt +=
     'Respond ONLY with a raw JSON array (no markdown fences, no commentary) of exactly ' +
     videos.length +
-    ' objects, one per video above in the same order, each shaped like {"videoId": the Video ID given above, "why": ..., "borrow": ...} — follow the instructions above for what "why" and "borrow" should each contain. Each can be either a plain string, or (if the instructions above call for a multi-part breakdown) a JSON object with short, descriptive keys — do not nest a breakdown inside a string.';
+    ' objects, one per video above in the same order. Each object must have a "videoId" key (the Video ID given above) plus whatever additional keys best capture the analysis called for in the instructions above — choose short, descriptive camelCase key names yourself; do not default to "why"/"borrow" unless the instructions above actually describe that as the structure. Each additional key\'s value can be a plain string, or a JSON object with descriptive sub-keys for a multi-part breakdown.';
 
   return prompt;
 }
