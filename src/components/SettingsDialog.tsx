@@ -19,7 +19,8 @@ export function SettingsDialog() {
         <div>
           <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>API keys</h2>
           <p style={{ fontSize: 13, color: muted(60), margin: 0 }}>
-            Stored only in this browser&apos;s local storage — sent directly from your browser to Anthropic / YouTube, never through a server you don&apos;t control.
+            Stored only in this browser&apos;s local storage. Anthropic and YouTube calls go straight from your browser; DeepSeek calls route through this
+            app&apos;s own server (its API doesn&apos;t support direct browser requests) but the key never touches anywhere else.
           </p>
         </div>
 
@@ -32,7 +33,19 @@ export function SettingsDialog() {
             placeholder="sk-ant-..."
             style={input}
           />
-          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>Used for Generate with AI, script generation, and Inspiration analysis.</div>
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>Used when a Claude model is selected in Generate.</div>
+        </div>
+
+        <div>
+          <div style={kicker}>DeepSeek API key</div>
+          <input
+            type="password"
+            value={app.settings.deepseekApiKey}
+            onChange={(e) => app.updateSettings({ deepseekApiKey: e.target.value })}
+            placeholder="sk-..."
+            style={input}
+          />
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>Used when a DeepSeek model is selected in Generate — the cheapest option.</div>
         </div>
 
         <div>

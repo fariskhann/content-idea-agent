@@ -4,10 +4,11 @@ const KEY = "cia_settings_v1";
 
 export interface Settings {
   anthropicApiKey: string;
+  deepseekApiKey: string;
   youtubeApiKey: string;
 }
 
-const empty: Settings = { anthropicApiKey: "", youtubeApiKey: "" };
+const empty: Settings = { anthropicApiKey: "", deepseekApiKey: "", youtubeApiKey: "" };
 
 export function loadSettings(): Settings {
   if (typeof window === "undefined") return empty;

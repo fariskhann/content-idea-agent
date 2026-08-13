@@ -100,6 +100,12 @@ export function Nav() {
           API keys / Settings
         </button>
         <button
+          onClick={() => app.setUsageDialogOpen(true)}
+          style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", cursor: "pointer", fontSize: 13, fontWeight: 600, textAlign: "left" }}
+        >
+          Usage &amp; costs
+        </button>
+        <button
           onClick={app.exportJSON}
           style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", cursor: "pointer", fontSize: 13, fontWeight: 600, textAlign: "left" }}
         >

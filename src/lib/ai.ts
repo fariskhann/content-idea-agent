@@ -1,31 +1,24 @@
-import type { AiModel } from "./types";
+import type { ModelInfo } from "./models";
 
-const MODEL_IDS: Record<AiModel, string> = {
-  haiku: "claude-haiku-4-5-20251001",
-  sonnet: "claude-sonnet-5",
-};
+export interface CompletionResult {
+  text: string;
+  usage: { inputTokens: number; outputTokens: number };
+}
 
-export function modelIdFor(model: AiModel): string {
-  return MODEL_IDS[model];
+export interface ApiKeys {
+  anthropicApiKey: string;
+  deepseekApiKey: string;
 }
 
 /**
  * Calls the Anthropic Messages API directly from the browser using the
- * user's own API key (stored client-side in Settings). Anthropic supports
- * this for prototyping via the "anthropic-dangerous-direct-browser-access"
- * header — the key is visible in the browser's network requests, which is
- * an accepted tradeoff for this single-user, no-backend app.
+ * user's own API key (stored client-side in Settings), via the documented
+ * "anthropic-dangerous-direct-browser-access" header. The key is visible in
+ * the browser's network requests — an accepted tradeoff for this
+ * single-user, no-backend app.
  */
-export async function claudeComplete(opts: {
-  apiKey: string;
-  model: AiModel;
-  prompt: string;
-  maxTokens?: number;
-}): Promise<string> {
-  const { apiKey, model, prompt, maxTokens = 1200 } = opts;
-  if (!apiKey) {
-    throw new Error("Add your Anthropic API key in Settings first.");
-  }
+async function completeAnthropic(apiKey: string, apiModelId: string, prompt: string, maxTokens: number): Promise<CompletionResult> {
+  if (!apiKey) throw new Error("Add your Anthropic API key in Settings first.");
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -35,7 +28,7 @@ export async function claudeComplete(opts: {
       "anthropic-dangerous-direct-browser-access": "true",
     },
     body: JSON.stringify({
-      model: modelIdFor(model),
+      model: apiModelId,
       max_tokens: maxTokens,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -53,7 +46,37 @@ export async function claudeComplete(opts: {
   const data = await res.json();
   const text = data?.content?.[0]?.text;
   if (typeof text !== "string") throw new Error("Unexpected response format from Anthropic.");
-  return text;
+  return {
+    text,
+    usage: { inputTokens: data?.usage?.input_tokens ?? 0, outputTokens: data?.usage?.output_tokens ?? 0 },
+  };
+}
+
+/**
+ * DeepSeek's OpenAI-compatible endpoint doesn't document browser-CORS support
+ * the way Anthropic's does, so this routes through our own Next.js API route
+ * instead of guessing — the key still lives only in the browser (localStorage)
+ * and is sent per-request, it just transits our own server on the way out.
+ */
+async function completeDeepSeek(apiKey: string, apiModelId: string, prompt: string, maxTokens: number): Promise<CompletionResult> {
+  if (!apiKey) throw new Error("Add your DeepSeek API key in Settings first.");
+  const res = await fetch("/api/deepseek/complete", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ apiKey, model: apiModelId, prompt, maxTokens }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `DeepSeek API error (${res.status})`);
+  if (typeof data.text !== "string") throw new Error("Unexpected response format from DeepSeek.");
+  return { text: data.text, usage: { inputTokens: data.usage?.inputTokens ?? 0, outputTokens: data.usage?.outputTokens ?? 0 } };
+}
+
+export async function complete(opts: { model: ModelInfo; apiKeys: ApiKeys; prompt: string; maxTokens?: number }): Promise<CompletionResult> {
+  const maxTokens = opts.maxTokens ?? 1200;
+  if (opts.model.provider === "anthropic") {
+    return completeAnthropic(opts.apiKeys.anthropicApiKey, opts.model.apiModelId, opts.prompt, maxTokens);
+  }
+  return completeDeepSeek(opts.apiKeys.deepseekApiKey, opts.model.apiModelId, opts.prompt, maxTokens);
 }
 
 /** Parses a JSON array out of a model response, tolerating stray prose or markdown fences. */

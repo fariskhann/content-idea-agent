@@ -11,9 +11,10 @@ import {
   expandIdeas,
   getGenerationPools,
 } from "./generation";
-import { claudeComplete, parseJsonArray } from "./ai";
+import { complete, parseJsonArray } from "./ai";
+import { getModel, costUsd } from "./models";
+import { loadUsageLog, saveUsageLog, type UsageLogEntry } from "./usage";
 import type {
-  AiModel,
   AppData,
   Category,
   Idea,
@@ -50,6 +51,8 @@ interface AppState {
   genStructureChecks: Record<string, boolean>;
   settings: Settings;
   settingsOpen: boolean;
+  usageLog: UsageLogEntry[];
+  usageDialogOpen: boolean;
 }
 
 function initialAppState(): AppState {
@@ -69,8 +72,10 @@ function initialAppState(): AppState {
     expandedCategoryIds: {},
     genFormatChecks: {},
     genStructureChecks: {},
-    settings: { anthropicApiKey: "", youtubeApiKey: "" },
+    settings: { anthropicApiKey: "", deepseekApiKey: "", youtubeApiKey: "" },
     settingsOpen: false,
+    usageLog: [],
+    usageDialogOpen: false,
   };
 }
 
@@ -94,7 +99,7 @@ function useAppStore() {
     } catch {
       // ignore corrupt storage
     }
-    setState((s) => ({ ...s, settings: loadSettings() }));
+    setState((s) => ({ ...s, settings: loadSettings(), usageLog: loadUsageLog() }));
     setHydrated(true);
   }, []);
 
@@ -299,6 +304,22 @@ function useAppStore() {
     [state.genCategory, state.genFormatChecks, state.genStructureChecks]
   );
 
+  // ---- usage / cost tracking ----
+  const logUsage = useCallback((entry: Omit<UsageLogEntry, "id" | "timestamp">) => {
+    setState((s) => {
+      const usageLog = [{ ...entry, id: genId(), timestamp: Date.now() }, ...s.usageLog].slice(0, 500);
+      saveUsageLog(usageLog);
+      return { ...s, usageLog };
+    });
+  }, []);
+  const clearUsage = useCallback(() => {
+    setState((s) => {
+      saveUsageLog([]);
+      return { ...s, usageLog: [] };
+    });
+  }, []);
+  const setUsageDialogOpen = useCallback((open: boolean) => setState((s) => ({ ...s, usageDialogOpen: open })), []);
+
   // ---- generation ----
   const quickSpin = useCallback(() => {
     const d = state.data;
@@ -332,15 +353,26 @@ function useAppStore() {
     try {
       const cat = state.genCategory !== "all" ? d.categories.find((c) => c.id === state.genCategory) : null;
       const rounds = d.genBatchSize || 1;
+      const model = getModel(d.aiModel);
+      const apiKeys = { anthropicApiKey: state.settings.anthropicApiKey, deepseekApiKey: state.settings.deepseekApiKey };
 
       if (cat) {
         const pools = getPoolsFor(cat);
         const { prompt, slots } = buildAiGeneratePromptForCategory(d, cat, pools, state.genPlatform, state.genContext, rounds);
-        const text = await claudeComplete({
-          apiKey: state.settings.anthropicApiKey,
-          model: d.aiModel,
+        const { text, usage } = await complete({
+          model,
+          apiKeys,
           prompt,
           maxTokens: Math.min(4000, 500 + slots.length * 220),
+        });
+        logUsage({
+          feature: "generate",
+          provider: model.provider,
+          modelId: model.id,
+          modelLabel: model.label,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
         });
         const parsed = parseJsonArray(text) as AiGenParsedItem[] | null;
         if (!parsed || !parsed.length) throw new Error("unexpected response format");
@@ -356,7 +388,16 @@ function useAppStore() {
         });
       } else {
         const prompt = buildAiGeneratePromptGeneric(d, getPoolsFor, state.genPlatform, state.genContext, rounds);
-        const text = await claudeComplete({ apiKey: state.settings.anthropicApiKey, model: d.aiModel, prompt, maxTokens: 1800 });
+        const { text, usage } = await complete({ model, apiKeys, prompt, maxTokens: 1800 });
+        logUsage({
+          feature: "generate",
+          provider: model.provider,
+          modelId: model.id,
+          modelLabel: model.label,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+        });
         const parsed = parseJsonArray(text) as AiGenParsedItem[] | null;
         if (!parsed || !parsed.length) throw new Error("unexpected response format");
         parsed.forEach((p) => {
@@ -374,7 +415,7 @@ function useAppStore() {
     } catch (err) {
       setState((s) => ({ ...s, generating: false, genError: "Generation failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" }));
     }
-  }, [state.data, state.genCategory, state.genPlatform, state.genContext, state.settings.anthropicApiKey, getPoolsFor, addIdea]);
+  }, [state.data, state.genCategory, state.genPlatform, state.genContext, state.settings.anthropicApiKey, state.settings.deepseekApiKey, getPoolsFor, addIdea, logUsage]);
 
   const generateScript = useCallback(
     async (id: string, instruction?: string) => {
@@ -385,7 +426,22 @@ function useAppStore() {
       try {
         const cat = d.categories.find((c) => c.id === idea.categoryId);
         const prompt = buildScriptPrompt(d, idea, cat, instruction || "");
-        const text = await claudeComplete({ apiKey: state.settings.anthropicApiKey, model: d.aiModel, prompt, maxTokens: 1200 });
+        const model = getModel(d.aiModel);
+        const { text, usage } = await complete({
+          model,
+          apiKeys: { anthropicApiKey: state.settings.anthropicApiKey, deepseekApiKey: state.settings.deepseekApiKey },
+          prompt,
+          maxTokens: 1200,
+        });
+        logUsage({
+          feature: "script",
+          provider: model.provider,
+          modelId: model.id,
+          modelLabel: model.label,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+        });
         setData((cur) => ({ ...cur, ideas: cur.ideas.map((i) => (i.id === id ? { ...i, script: text.trim(), status: "scripted" } : i)) }));
         setState((s) => ({
           ...s,
@@ -397,7 +453,7 @@ function useAppStore() {
         setState((s) => ({ ...s, scriptGeneratingIds: { ...s.scriptGeneratingIds, [id]: false }, genError: "Script generation failed — try again." }));
       }
     },
-    [state.data, state.settings.anthropicApiKey, setData]
+    [state.data, state.settings.anthropicApiKey, state.settings.deepseekApiKey, setData, logUsage]
   );
 
   // ---- tabs ----
@@ -405,7 +461,7 @@ function useAppStore() {
   const goToBoard = useCallback(() => setState((s) => ({ ...s, activeTab: "ideas", justGenerated: false })), []);
 
   // ---- generate controls ----
-  const setAiModel = useCallback((model: AiModel) => setData((d) => ({ ...d, aiModel: model })), [setData]);
+  const setAiModel = useCallback((modelId: string) => setData((d) => ({ ...d, aiModel: modelId })), [setData]);
   const setGenBatchSize = useCallback((v: number) => setData((d) => ({ ...d, genBatchSize: v })), [setData]);
   const setGenCategory = useCallback((id: string) => setState((s) => ({ ...s, genCategory: id, genFormatChecks: {}, genStructureChecks: {} })), []);
   const setGenPlatform = useCallback((p: Platform) => setState((s) => ({ ...s, genPlatform: p })), []);
@@ -513,6 +569,9 @@ function useAppStore() {
     updateSettings,
     setSettingsOpen,
     updateInspirationYoutube,
+    logUsage,
+    clearUsage,
+    setUsageDialogOpen,
   };
 }
 

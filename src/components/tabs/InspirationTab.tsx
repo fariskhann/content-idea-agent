@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
 import { chipStyle, muted, pageSubtitle, pageTitle, primaryBtn, removeBtn } from "@/lib/styles";
-import { claudeComplete, parseJsonArray } from "@/lib/ai";
+import { complete, parseJsonArray } from "@/lib/ai";
+import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt } from "@/lib/youtube";
 import type { Inspiration, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
 
@@ -54,8 +55,10 @@ function YoutubePanel({ insp }: { insp: Inspiration }) {
 
   async function handleAnalyze() {
     setError("");
-    if (!app.settings.anthropicApiKey) {
-      setError("Add your Anthropic API key in Settings first.");
+    const selectedModel = getModel(app.data.aiModel);
+    const hasKey = selectedModel.provider === "anthropic" ? !!app.settings.anthropicApiKey : !!app.settings.deepseekApiKey;
+    if (!hasKey) {
+      setError(`Add your ${providerLabel(selectedModel.provider)} API key in Settings first.`);
       return;
     }
     const { medianViews: mv, outliers: outlierVideos } = computeOutliers(videos);
@@ -80,11 +83,21 @@ function YoutubePanel({ insp }: { insp: Inspiration }) {
       app.updateInspirationYoutube(insp.id, { youtubeVideos: updatedVideos });
 
       const prompt = buildYoutubeAnalysisPrompt(app.data, insp.name || insp.handle, mv, outliersWithTranscripts);
-      const text = await claudeComplete({
-        apiKey: app.settings.anthropicApiKey,
-        model: app.data.aiModel,
+      const model = getModel(app.data.aiModel);
+      const { text, usage } = await complete({
+        model,
+        apiKeys: { anthropicApiKey: app.settings.anthropicApiKey, deepseekApiKey: app.settings.deepseekApiKey },
         prompt,
         maxTokens: Math.min(4000, 400 + outliersWithTranscripts.length * 300),
+      });
+      app.logUsage({
+        feature: "youtube-analysis",
+        provider: model.provider,
+        modelId: model.id,
+        modelLabel: model.label,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
       });
       const parsed = parseJsonArray(text) as { videoId?: string; why?: string; borrow?: string }[] | null;
       if (!parsed || !parsed.length) throw new Error("unexpected response format");

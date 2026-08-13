@@ -2,7 +2,6 @@ export type Platform = "Any" | "YouTube" | "Instagram" | "TikTok";
 export type Stage = "TOF" | "MOF" | "BOF";
 export type Owner = "brand" | "personal";
 export type IdeaStatus = "idea" | "scripted" | "filmed" | "posted";
-export type AiModel = "haiku" | "sonnet";
 
 export interface TextItem {
   id: string;
@@ -88,7 +87,8 @@ export interface AppData {
   personalVoice: string;
   personalTraits: TextItem[];
   personalNotes: string;
-  aiModel: AiModel;
+  /** References a ModelInfo.id from lib/models.ts */
+  aiModel: string;
   genBatchSize: number;
   categories: Category[];
   hooks: TextItem[];

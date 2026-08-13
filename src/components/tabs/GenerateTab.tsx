@@ -2,6 +2,7 @@
 
 import { useApp } from "@/lib/AppContext";
 import { chipStyle, kicker, muted, pageSubtitle, pageTitle, primaryBtn, secondaryBtn, textarea } from "@/lib/styles";
+import { MODELS, providerLabel } from "@/lib/models";
 import type { Platform } from "@/lib/types";
 
 const PLATFORMS: Platform[] = ["Any", "YouTube", "Instagram", "TikTok"];
@@ -89,14 +90,21 @@ export function GenerateTab() {
       <div style={{ display: "flex", gap: 40, flexWrap: "wrap", marginBottom: 24 }}>
         <div>
           <div style={{ ...kicker, marginBottom: 10 }}>AI model</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button style={chipStyle(d.aiModel === "haiku")} onClick={() => app.setAiModel("haiku")}>
-              Haiku — fast
-            </button>
-            <button style={chipStyle(d.aiModel === "sonnet")} onClick={() => app.setAiModel("sonnet")}>
-              Sonnet — stronger
-            </button>
-          </div>
+          <select
+            value={d.aiModel}
+            onChange={(e) => app.setAiModel(e.target.value)}
+            style={{ fontSize: 13, padding: "8px 10px", border: "1px solid var(--color-divider)", background: "var(--color-surface)", color: "var(--color-text)", minWidth: 260 }}
+          >
+            {(["anthropic", "deepseek"] as const).map((provider) => (
+              <optgroup key={provider} label={providerLabel(provider)}>
+                {MODELS.filter((m) => m.provider === provider).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} — ${m.inputPricePerM}/${m.outputPricePerM} per 1M
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
         </div>
         <div>
           <div style={{ ...kicker, marginBottom: 10 }}>

@@ -1,4 +1,5 @@
 import { genId } from "./id";
+import { DEFAULT_MODEL_ID } from "./models";
 import type { AppData } from "./types";
 
 export function defaultSeed(): AppData {
@@ -15,7 +16,7 @@ export function defaultSeed(): AppData {
     personalVoice: "",
     personalTraits: [],
     personalNotes: "",
-    aiModel: "haiku",
+    aiModel: DEFAULT_MODEL_ID,
     genBatchSize: 5,
     categories: [
       {

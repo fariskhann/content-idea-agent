@@ -2,6 +2,7 @@
 
 import { Nav } from "@/components/Nav";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { UsageDialog } from "@/components/UsageDialog";
 import { AboutTab } from "@/components/tabs/AboutTab";
 import { GenerateTab } from "@/components/tabs/GenerateTab";
 import { IdeasBoardTab } from "@/components/tabs/IdeasBoardTab";
@@ -25,6 +26,7 @@ export function ContentIdeaAgent() {
         {app.activeTab === "inspiration" && <InspirationTab />}
       </main>
       <SettingsDialog />
+      <UsageDialog />
     </div>
   );
 }
