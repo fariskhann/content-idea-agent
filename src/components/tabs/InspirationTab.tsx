@@ -131,9 +131,11 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
         model,
         apiKeys: { anthropicApiKey: app.settings.anthropicApiKey, deepseekApiKey: app.settings.deepseekApiKey },
         prompt,
-        // Real transcript content (via Supadata) makes for longer, more specific per-video answers
-        // than the old "transcript unavailable" world this budget was originally sized for.
-        maxTokens: Math.min(16000, 800 + withTranscripts.length * 600),
+        // Cutting off at 1400 tokens for a single video (previous budget) means per-video answers
+        // are now far longer than the old generic 2-3 sentence default — likely because custom
+        // Analysis instructions are actually being followed now (see the schema-override fix).
+        // Capped at 60000 to stay under Claude Haiku 4.5's 64K output ceiling with margin.
+        maxTokens: Math.min(60000, 4000 + withTranscripts.length * 3000),
       });
       app.logUsage({
         feature: "youtube-analysis",
