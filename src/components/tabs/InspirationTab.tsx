@@ -301,44 +301,56 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={v.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} className="grayscale" />
                   )}
-                  <div style={{ position: "absolute", top: 5, left: 5, background: "rgba(255,255,255,0.9)", display: "flex", padding: 1 }}>
+                  <div style={{ position: "absolute", top: 5, left: 5, display: "flex", flexDirection: "row", gap: 3, alignItems: "center" }}>
                     <input
                       type="checkbox"
                       checked={selectedIds.has(v.id)}
                       onChange={() => toggleSelected(v.id)}
                       style={{ accentColor: "var(--color-accent)", width: 15, height: 15, display: "block" }}
                     />
+                    {analysis && (
+                      <button
+                        onClick={() => handleReanalyzeOne(v.id)}
+                        disabled={analyzing}
+                        title="Analyse again — reuses the existing transcript and picks up any changes to Analysis instructions"
+                        style={{
+                          border: "none",
+                          background: "rgba(255,255,255,0.9)",
+                          width: 15,
+                          height: 15,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 0,
+                          color: muted(70),
+                          cursor: analyzing ? "default" : "pointer",
+                          fontSize: 11,
+                          lineHeight: 1,
+                        }}
+                      >
+                        ↻
+                      </button>
+                    )}
                   </div>
                   <div style={{ position: "absolute", top: 5, right: 5, display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
                     {isOutlier && <span style={{ fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "1px 6px", whiteSpace: "nowrap" }}>Outlier</span>}
                     {analysis && <span style={{ fontSize: 10, background: "var(--color-neutral-100)", color: "var(--color-neutral-800)", padding: "1px 6px", whiteSpace: "nowrap" }}>Analysed</span>}
-                    <div style={{ display: "flex", gap: 1 }}>
-                      {analysis && (
-                        <button
-                          onClick={() => handleReanalyzeOne(v.id)}
-                          disabled={analyzing}
-                          title="Analyse again — reuses the existing transcript and picks up any changes to Analysis instructions"
-                          style={{ border: "none", background: "rgba(255,255,255,0.9)", padding: "2px 4px", color: muted(70), cursor: analyzing ? "default" : "pointer", fontSize: 13, lineHeight: 1 }}
-                        >
-                          ↻
-                        </button>
-                      )}
-                      <button
-                        onClick={() => toggleMinimized(v)}
-                        title={minimized ? "Expand" : "Collapse"}
-                        style={{ border: "none", background: "rgba(255,255,255,0.9)", padding: "2px 4px", color: muted(70), cursor: "pointer", fontSize: 11, lineHeight: 1 }}
-                      >
-                        {minimized ? "▸" : "▾"}
-                      </button>
-                    </div>
                   </div>
                 </div>
 
-                <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ padding: "8px 5px 8px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text)" }}>{v.title}</span>
-                  <span style={{ fontSize: 11, color: muted(55) }}>
-                    {fmtViews(v.viewCount)} views · {new Date(v.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontSize: 11, lineHeight: 1, color: muted(55) }}>
+                      {fmtViews(v.viewCount)} views · {new Date(v.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    </span>
+                    <button
+                      onClick={() => toggleMinimized(v)}
+                      style={{ textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 11, lineHeight: 1, fontWeight: 600, color: muted(55), flexShrink: 0 }}
+                    >
+                      {minimized ? "+ Expand" : "− Collapse"}
+                    </button>
+                  </div>
 
                   {!minimized && (
                     <>
