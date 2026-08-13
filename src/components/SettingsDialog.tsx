@@ -1,9 +1,47 @@
 "use client";
 
+import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
 import { input, kicker, muted, primaryBtn, secondaryBtn } from "@/lib/styles";
 import { MODELS, providerLabel } from "@/lib/models";
 import { computeSupadataUsage } from "@/lib/transcriptUsage";
+
+/** "sk-ant-a1b2c3...9xYz" — never the full key, just enough to confirm you pasted the right one. */
+function maskKeyPreview(key: string): string {
+  if (key.length <= 8) return key.length <= 2 ? key : key[0] + "…" + key[key.length - 1];
+  return key.slice(0, 6) + "…" + key.slice(-4);
+}
+
+function KeyInput({
+  value,
+  onChange,
+  placeholder,
+  revealed,
+  onToggleReveal,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  revealed: boolean;
+  onToggleReveal: () => void;
+}) {
+  return (
+    <>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input type="password" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ ...input, flex: 1 }} />
+        <button
+          type="button"
+          onClick={onToggleReveal}
+          disabled={!value}
+          style={{ ...secondaryBtn, padding: "0 12px", fontSize: 12, flexShrink: 0, cursor: value ? "pointer" : "default", opacity: value ? 1 : 0.5 }}
+        >
+          {revealed ? "Hide" : "View"}
+        </button>
+      </div>
+      {revealed && value && <div style={{ fontSize: 12, fontFamily: "monospace", color: muted(70), marginTop: 4 }}>{maskKeyPreview(value)}</div>}
+    </>
+  );
+}
 
 function SupadataKeyField({
   label,
@@ -14,6 +52,8 @@ function SupadataKeyField({
   onChangeKey,
   onChangeResetDay,
   inputId,
+  revealed,
+  onToggleReveal,
 }: {
   label: string;
   hint: string;
@@ -23,12 +63,14 @@ function SupadataKeyField({
   onChangeKey: (v: string) => void;
   onChangeResetDay: (v: number) => void;
   inputId: string;
+  revealed: boolean;
+  onToggleReveal: () => void;
 }) {
   const usage = computeSupadataUsage(log, resetDay);
   return (
     <div>
       <div style={kicker}>{label}</div>
-      <input type="password" value={value} onChange={(e) => onChangeKey(e.target.value)} placeholder="sd_..." style={input} />
+      <KeyInput value={value} onChange={onChangeKey} placeholder="sd_..." revealed={revealed} onToggleReveal={onToggleReveal} />
       <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>{hint}</div>
       {value && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 8, padding: "8px 10px", background: "var(--color-surface)" }}>
@@ -60,7 +102,10 @@ function SupadataKeyField({
 
 export function SettingsDialog() {
   const app = useApp();
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   if (!app.settingsOpen) return null;
+
+  const toggleReveal = (key: string) => setRevealed((prev) => ({ ...prev, [key]: !prev[key] }));
 
   return (
     <div
@@ -109,36 +154,36 @@ export function SettingsDialog() {
 
         <div>
           <div style={kicker}>Anthropic API key</div>
-          <input
-            type="password"
+          <KeyInput
             value={app.settings.anthropicApiKey}
-            onChange={(e) => app.updateSettings({ anthropicApiKey: e.target.value })}
+            onChange={(v) => app.updateSettings({ anthropicApiKey: v })}
             placeholder="sk-ant-..."
-            style={input}
+            revealed={!!revealed.anthropic}
+            onToggleReveal={() => toggleReveal("anthropic")}
           />
           <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>Used when a Claude model is selected in Generate.</div>
         </div>
 
         <div>
           <div style={kicker}>DeepSeek API key</div>
-          <input
-            type="password"
+          <KeyInput
             value={app.settings.deepseekApiKey}
-            onChange={(e) => app.updateSettings({ deepseekApiKey: e.target.value })}
+            onChange={(v) => app.updateSettings({ deepseekApiKey: v })}
             placeholder="sk-..."
-            style={input}
+            revealed={!!revealed.deepseek}
+            onToggleReveal={() => toggleReveal("deepseek")}
           />
           <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>Used when a DeepSeek model is selected in Generate — the cheapest option.</div>
         </div>
 
         <div>
           <div style={kicker}>YouTube Data API key</div>
-          <input
-            type="password"
+          <KeyInput
             value={app.settings.youtubeApiKey}
-            onChange={(e) => app.updateSettings({ youtubeApiKey: e.target.value })}
+            onChange={(v) => app.updateSettings({ youtubeApiKey: v })}
             placeholder="AIza..."
-            style={input}
+            revealed={!!revealed.youtube}
+            onToggleReveal={() => toggleReveal("youtube")}
           />
           <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
             API-key-only credential from Google Cloud Console (no OAuth needed) — used to pull channel video lists in Inspiration.
@@ -155,6 +200,8 @@ export function SettingsDialog() {
             onChangeKey={(v) => app.updateSettings({ supadataApiKey: v })}
             onChangeResetDay={(v) => app.updateSettings({ supadataResetDay: v })}
             inputId="supadata-reset-day"
+            revealed={!!revealed.supadataPrimary}
+            onToggleReveal={() => toggleReveal("supadataPrimary")}
           />
 
           <button
@@ -174,6 +221,8 @@ export function SettingsDialog() {
             onChangeKey={(v) => app.updateSettings({ supadataBackupApiKey: v })}
             onChangeResetDay={(v) => app.updateSettings({ supadataBackupResetDay: v })}
             inputId="supadata-backup-reset-day"
+            revealed={!!revealed.supadataBackup}
+            onToggleReveal={() => toggleReveal("supadataBackup")}
           />
 
           <div style={{ fontSize: 11, color: muted(50) }}>
