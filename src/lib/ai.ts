@@ -79,17 +79,31 @@ export async function complete(opts: { model: ModelInfo; apiKeys: ApiKeys; promp
   return completeDeepSeek(opts.apiKeys.deepseekApiKey, opts.model.apiModelId, opts.prompt, maxTokens);
 }
 
-/** Parses a JSON array out of a model response, tolerating stray prose or markdown fences. */
+/** A single item is wrapped into a one-element array — models asked for "an array of exactly 1 object" sometimes drop the brackets. */
+function asArray(parsed: unknown): unknown[] | null {
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === "object") return [parsed];
+  return null;
+}
+
+/** Parses a JSON array out of a model response, tolerating stray prose, markdown fences, or a single bare object instead of a one-item array. */
 export function parseJsonArray(text: string): unknown[] | null {
   try {
-    const parsed = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed : null;
+    return asArray(JSON.parse(text));
   } catch {
-    const match = text.match(/\[[\s\S]*\]/);
-    if (!match) return null;
+    const arrayMatch = text.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      try {
+        const parsed = asArray(JSON.parse(arrayMatch[0]));
+        if (parsed) return parsed;
+      } catch {
+        // fall through to object match below
+      }
+    }
+    const objectMatch = text.match(/\{[\s\S]*\}/);
+    if (!objectMatch) return null;
     try {
-      const parsed = JSON.parse(match[0]);
-      return Array.isArray(parsed) ? parsed : null;
+      return asArray(JSON.parse(objectMatch[0]));
     } catch {
       return null;
     }
