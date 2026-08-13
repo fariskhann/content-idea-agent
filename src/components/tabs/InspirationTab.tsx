@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
-import { chipStyle, muted, pageSubtitle, pageTitle, primaryBtn, removeBtn, secondaryBtn } from "@/lib/styles";
+import { chipStyle, muted, pageSubtitle, pageTitle, primaryBtn, removeBtn, textarea as textareaStyle } from "@/lib/styles";
 import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt } from "@/lib/youtube";
-import type { Inspiration, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
+import type { Category, Inspiration, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
 
 function fmtViews(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -14,7 +14,7 @@ function fmtViews(n: number): string {
   return String(n);
 }
 
-function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: () => void }) {
+function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedCategories: Category[] }) {
   const app = useApp();
   const [count, setCount] = useState(DEFAULT_VIDEO_COUNT);
   const [fetching, setFetching] = useState(false);
@@ -100,7 +100,7 @@ function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: ()
       }
       app.updateInspirationYoutube(insp.id, { youtubeVideos: updatedVideos });
 
-      const prompt = buildYoutubeAnalysisPrompt(app.data, insp.name || insp.handle, avgViews, withTranscripts);
+      const prompt = buildYoutubeAnalysisPrompt(app.data, insp.name || insp.handle, avgViews, withTranscripts, taggedCategories);
       const model = getModel(app.data.aiModel);
       const { text, usage } = await complete({
         model,
@@ -129,71 +129,63 @@ function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: ()
   }
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, display: "grid", placeItems: "center", padding: 16, background: "color-mix(in srgb, var(--color-neutral-900) 50%, transparent)", zIndex: 50 }}
-      onClick={onClose}
-    >
-      <div
-        style={{ width: "min(760px, 100%)", maxHeight: "88vh", display: "flex", flexDirection: "column", gap: 14, padding: 24, background: "var(--color-bg)", border: "2px solid var(--color-divider)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-          <div>
-            <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>{insp.name || insp.handle || "YouTube channel"}</h2>
-            <p style={{ fontSize: 12, color: muted(55), margin: 0 }}>Shorts are excluded — only regular uploads are pulled and scored.</p>
-          </div>
-          <button onClick={onClose} style={{ border: "none", background: "transparent", color: muted(50), cursor: "pointer", fontSize: 20, lineHeight: 1 }}>
-            ×
-          </button>
-        </div>
+    <div style={{ borderTop: `1px solid ${muted(25)}`, marginTop: 8, paddingTop: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>
+        YouTube videos <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— Shorts are excluded automatically</span>
+      </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>Last</span>
-          <input
-            type="number"
-            min={1}
-            max={MAX_VIDEO_COUNT}
-            value={count}
-            onChange={(e) => setCount(Math.min(MAX_VIDEO_COUNT, Math.max(1, parseInt(e.target.value, 10) || 1)))}
-            style={{ width: 52, border: `1px solid ${muted(25)}`, background: "var(--color-surface)", fontSize: 12, color: "var(--color-text)", padding: "5px 6px" }}
-          />
-          <span style={{ fontSize: 11, color: muted(55) }}>videos (max {MAX_VIDEO_COUNT})</span>
-          <button
-            onClick={handleFetch}
-            disabled={fetching}
-            style={{ border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
-          >
-            {fetching ? "Fetching…" : videos.length ? "Refresh videos" : "Fetch videos"}
-          </button>
-          {videos.length > 0 && (
-            <button
-              onClick={handleAnalyze}
-              disabled={analyzing || selectedIds.size === 0}
-              style={{ border: "1px solid var(--color-accent)", background: "var(--color-accent)", color: "var(--color-bg)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
-            >
-              {analyzing ? "Analysing…" : `Analyse videos (${selectedIds.size})`}
-            </button>
-          )}
-        </div>
-
-        {error && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{error}</div>}
-
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>Last</span>
+        <input
+          type="number"
+          min={1}
+          max={MAX_VIDEO_COUNT}
+          value={count}
+          onChange={(e) => setCount(Math.min(MAX_VIDEO_COUNT, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+          style={{ width: 52, border: `1px solid ${muted(25)}`, background: "var(--color-surface)", fontSize: 12, color: "var(--color-text)", padding: "5px 6px" }}
+        />
+        <span style={{ fontSize: 11, color: muted(55) }}>videos (max {MAX_VIDEO_COUNT})</span>
+        <button
+          onClick={handleFetch}
+          disabled={fetching}
+          style={{ border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+        >
+          {fetching ? "Fetching…" : videos.length ? "Refresh videos" : "Fetch videos"}
+        </button>
         {videos.length > 0 && (
-          <div style={{ fontSize: 11, color: muted(55) }}>
-            Average views this batch: {fmtViews(avgViews)} · {outliers.length} outlier{outliers.length === 1 ? "" : "s"} flagged (≥1.5× average) · outliers are
-            ticked by default, but you can tick/untick any video below
-          </div>
+          <button
+            onClick={handleAnalyze}
+            disabled={analyzing || selectedIds.size === 0}
+            style={{ border: "1px solid var(--color-accent)", background: "var(--color-accent)", color: "var(--color-bg)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            {analyzing ? "Analysing…" : `Analyse videos (${selectedIds.size})`}
+          </button>
         )}
+      </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, paddingRight: 2 }}>
-          {videos.length === 0 && !fetching && (
-            <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: muted(50), border: `1px solid ${muted(15)}` }}>No videos fetched yet.</div>
-          )}
+      {error && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{error}</div>}
+
+      {videos.length > 0 && (
+        <div style={{ fontSize: 11, color: muted(55) }}>
+          Average views this batch: {fmtViews(avgViews)} · {outliers.length} outlier{outliers.length === 1 ? "" : "s"} flagged (≥1.5× average) · outliers are
+          ticked by default, but you can tick/untick any video below
+        </div>
+      )}
+
+      {videos.length === 0 && !fetching && (
+        <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: muted(50), border: `1px solid ${muted(15)}` }}>No videos fetched yet.</div>
+      )}
+
+      {videos.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
           {videos.map((v) => {
             const isOutlier = outlierIds.has(v.id);
             const analysis = analysisById.get(v.id);
             return (
-              <div key={v.id} style={{ display: "flex", gap: 10, background: "var(--color-surface)", padding: 10, border: isOutlier ? "1px solid var(--color-accent)" : `1px solid ${muted(15)}` }}>
+              <div
+                key={v.id}
+                style={{ display: "flex", gap: 10, background: "var(--color-surface)", padding: 10, border: isOutlier ? "1px solid var(--color-accent)" : `1px solid ${muted(15)}` }}
+              >
                 <input
                   type="checkbox"
                   checked={selectedIds.has(v.id)}
@@ -202,7 +194,7 @@ function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: ()
                 />
                 {v.thumbnail && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={v.thumbnail} alt="" width={120} height={68} style={{ objectFit: "cover", flexShrink: 0 }} className="grayscale" />
+                  <img src={v.thumbnail} alt="" width={110} height={62} style={{ objectFit: "cover", flexShrink: 0 }} className="grayscale" />
                 )}
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -228,34 +220,84 @@ function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: ()
             );
           })}
         </div>
-
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
-          <button style={secondaryBtn} onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function YoutubePanel({ insp }: { insp: Inspiration }) {
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const videos = insp.youtubeVideos || [];
-  const { outliers } = computeOutliers(videos);
+function InspirationDetail({ insp }: { insp: Inspiration }) {
+  const app = useApp();
+  const taggedCategories = app.data.categories.filter((c) => insp.tags.includes(c.id));
 
   return (
-    <div style={{ borderTop: `1px solid ${muted(25)}`, marginTop: 4, paddingTop: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-      <span style={{ fontSize: 11, color: muted(55) }}>
-        {videos.length > 0 ? `${videos.length} videos loaded · ${outliers.length} outlier${outliers.length === 1 ? "" : "s"}` : "No videos fetched yet"}
-      </span>
-      <button
-        onClick={() => setDialogOpen(true)}
-        style={{ border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
-      >
-        {videos.length > 0 ? "View videos" : "Fetch videos"}
-      </button>
-      {dialogOpen && <YoutubeVideosDialog insp={insp} onClose={() => setDialogOpen(false)} />}
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 900 }}>
+      <input
+        value={insp.name}
+        onChange={(e) => app.updateInspiration(insp.id, "name", e.target.value)}
+        placeholder="Name / page"
+        style={{
+          border: "none",
+          borderBottom: "1px solid transparent",
+          background: "transparent",
+          fontFamily: "var(--font-heading)",
+          fontSize: 26,
+          fontWeight: 800,
+          letterSpacing: "-0.01em",
+          color: "var(--color-text)",
+          padding: "2px 0",
+        }}
+      />
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          value={insp.handle}
+          onChange={(e) => app.updateInspiration(insp.id, "handle", e.target.value)}
+          placeholder="@handle"
+          style={{ width: 200, border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 13, color: "var(--color-text)", padding: "8px 10px" }}
+        />
+        <select
+          value={insp.platform}
+          onChange={(e) => app.updateInspiration(insp.id, "platform", e.target.value as Inspiration["platform"])}
+          style={{ border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 13, color: "var(--color-text)", padding: "8px 10px" }}
+        >
+          <option value="Instagram">Instagram</option>
+          <option value="TikTok">TikTok</option>
+          <option value="YouTube">YouTube</option>
+          <option value="Other">Other</option>
+        </select>
+        <input
+          value={insp.link}
+          onChange={(e) => app.updateInspiration(insp.id, "link", e.target.value)}
+          placeholder="https://..."
+          style={{ flex: 1, minWidth: 220, border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 13, color: "var(--color-text)", padding: "8px 10px" }}
+        />
+        {insp.link && (
+          <a href={insp.link} target="_blank" rel="noopener" style={{ fontSize: 13 }}>
+            Open ↗
+          </a>
+        )}
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {app.data.categories.map((c) => {
+          const active = insp.tags.includes(c.id);
+          return (
+            <button key={c.id} style={chipStyle(active)} onClick={() => app.toggleInspirationTag(insp.id, c.id)}>
+              {c.name}
+            </button>
+          );
+        })}
+      </div>
+
+      <textarea
+        value={insp.notes}
+        onChange={(e) => app.updateInspiration(insp.id, "notes", e.target.value)}
+        placeholder="What do you like about their content?"
+        rows={3}
+        style={{ ...textareaStyle, maxWidth: 640 }}
+      />
+
+      {insp.platform === "YouTube" && <YoutubeSection insp={insp} taggedCategories={taggedCategories} />}
     </div>
   );
 }
@@ -263,9 +305,22 @@ function YoutubePanel({ insp }: { insp: Inspiration }) {
 export function InspirationTab() {
   const app = useApp();
   const inspirations = app.data.inspirations;
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = inspirations.find((i) => i.id === selectedId) || inspirations[0] || null;
+
+  function handleAdd() {
+    const id = app.addInspiration();
+    setSelectedId(id);
+  }
+
+  function handleRemove(id: string) {
+    const remaining = inspirations.filter((i) => i.id !== id);
+    app.removeInspiration(id);
+    setSelectedId(remaining[0]?.id ?? null);
+  }
 
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div style={{ maxWidth: 1100 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 26 }}>
         <div>
           <h1 style={pageTitle}>Inspiration</h1>
@@ -274,82 +329,53 @@ export function InspirationTab() {
             recent videos and flag which ones outperformed the channel&apos;s own baseline.
           </p>
         </div>
-        <button onClick={app.addInspiration} style={{ flexShrink: 0, ...primaryBtn, padding: "11px 18px", fontSize: 13 }}>
+        <button onClick={handleAdd} style={{ flexShrink: 0, ...primaryBtn, padding: "11px 18px", fontSize: 13 }}>
           + Add
         </button>
       </div>
 
-      {inspirations.length === 0 && (
+      {inspirations.length === 0 ? (
         <div style={{ fontSize: 14, color: muted(50), padding: 32, textAlign: "center", border: "1px solid var(--color-divider)" }}>
           No inspiration saved yet — add a page or creator you admire.
         </div>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        {inspirations.map((insp) => (
-          <div key={insp.id} style={{ background: "var(--color-surface)", padding: 18, display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                value={insp.name}
-                onChange={(e) => app.updateInspiration(insp.id, "name", e.target.value)}
-                placeholder="Name / page"
-                style={{ flex: 1, border: "none", borderBottom: "1px solid transparent", background: "transparent", fontFamily: "var(--font-heading)", fontSize: 16, fontWeight: 800, color: "var(--color-text)", padding: "2px 0" }}
-              />
-              <button onClick={() => app.removeInspiration(insp.id)} style={{ ...removeBtn, fontSize: 17 }}>
-                ×
-              </button>
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <input
-                value={insp.handle}
-                onChange={(e) => app.updateInspiration(insp.id, "handle", e.target.value)}
-                placeholder="@handle"
-                style={{ flex: 1, border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 12, color: "var(--color-text)", padding: "6px 8px" }}
-              />
-              <select
-                value={insp.platform}
-                onChange={(e) => app.updateInspiration(insp.id, "platform", e.target.value as Inspiration["platform"])}
-                style={{ border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 12, color: "var(--color-text)", padding: "6px 8px" }}
-              >
-                <option value="Instagram">Instagram</option>
-                <option value="TikTok">TikTok</option>
-                <option value="YouTube">YouTube</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <input
-              value={insp.link}
-              onChange={(e) => app.updateInspiration(insp.id, "link", e.target.value)}
-              placeholder="https://..."
-              style={{ border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 12, color: "var(--color-text)", padding: "6px 8px" }}
-            />
-            {insp.link && (
-              <a href={insp.link} target="_blank" rel="noopener" style={{ fontSize: 12 }}>
-                Open ↗
-              </a>
-            )}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
-              {app.data.categories.map((c) => {
-                const active = insp.tags.includes(c.id);
-                return (
-                  <button key={c.id} style={chipStyle(active)} onClick={() => app.toggleInspirationTag(insp.id, c.id)}>
-                    {c.name}
+      ) : (
+        <div style={{ display: "flex", gap: 28 }}>
+          <div style={{ width: 220, flexShrink: 0, display: "flex", flexDirection: "column", gap: 2, borderRight: "1px solid var(--color-divider)", paddingRight: 16 }}>
+            {inspirations.map((insp) => {
+              const active = selected?.id === insp.id;
+              return (
+                <div key={insp.id} style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <button
+                    onClick={() => setSelectedId(insp.id)}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      textAlign: "left",
+                      padding: "9px 10px",
+                      borderLeft: `2px solid ${active ? "var(--color-accent)" : "transparent"}`,
+                      background: active ? "var(--color-surface)" : "transparent",
+                      color: active ? "var(--color-accent-700)" : "var(--color-text)",
+                      cursor: active ? "default" : "pointer",
+                      fontSize: 13,
+                      fontWeight: active ? 800 : 400,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 2,
+                    }}
+                  >
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{insp.name || insp.handle || "Untitled"}</span>
+                    <span style={{ fontSize: 10, color: muted(50), fontWeight: 400 }}>{insp.platform}</span>
                   </button>
-                );
-              })}
-            </div>
-            <textarea
-              value={insp.notes}
-              onChange={(e) => app.updateInspiration(insp.id, "notes", e.target.value)}
-              placeholder="What do you like about their content?"
-              rows={2}
-              style={{ border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 12, color: "var(--color-text)", padding: "6px 8px", width: "100%" }}
-            />
-
-            {insp.platform === "YouTube" && <YoutubePanel insp={insp} />}
+                  <button onClick={() => handleRemove(insp.id)} style={{ ...removeBtn, fontSize: 15, flexShrink: 0 }}>
+                    ×
+                  </button>
+                </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
+          <div style={{ flex: 1, minWidth: 0 }}>{selected && <InspirationDetail insp={selected} />}</div>
+        </div>
+      )}
     </div>
   );
 }

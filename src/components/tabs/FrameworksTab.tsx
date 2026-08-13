@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/lib/AppContext";
-import { ghostAddBtn, inputSm, kicker, muted, pageSubtitle, pageTitle, removeBtn } from "@/lib/styles";
+import { ghostAddBtn, inputSm, kicker, muted, pageSubtitle, pageTitle, removeBtn, textarea } from "@/lib/styles";
 import type { Category, Owner, Stage } from "@/lib/types";
 
 function CategoryCard({ cat }: { cat: Category }) {
@@ -149,6 +149,39 @@ export function FrameworksTab() {
         <button onClick={app.addHook} style={{ ...ghostAddBtn, maxWidth: 480, width: "100%" }}>
           + Add hook formula
         </button>
+      </div>
+
+      <div style={{ borderTop: "2px solid var(--color-divider)", paddingTop: 24, marginTop: 32 }}>
+        <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>Analysis instructions</h2>
+        <p style={{ fontSize: 13, color: muted(60), margin: "0 0 16px" }}>
+          The exact instructions sent to the AI when analyzing inspiration videos/posts — edit these to change how it explains why something worked and what
+          to borrow.
+        </p>
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={kicker}>YouTube video analysis</div>
+          <textarea
+            value={d.youtubeAnalysisInstructions}
+            onChange={(e) => app.setBrandField("youtubeAnalysisInstructions")(e.target.value)}
+            rows={4}
+            style={{ ...textarea, maxWidth: 640 }}
+          />
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
+            Sent as-is on every YouTube outlier analysis, right after the video list. The generator also auto-appends a note biasing the &quot;borrow&quot;
+            suggestion toward whichever of your content types the creator is tagged with in Inspiration.
+          </div>
+        </div>
+
+        <div>
+          <div style={kicker}>Instagram / TikTok analysis</div>
+          <textarea
+            value={d.igTiktokAnalysisInstructions}
+            onChange={(e) => app.setBrandField("igTiktokAnalysisInstructions")(e.target.value)}
+            placeholder="Not wired into a live AI call yet — neither platform has a public fetch API like YouTube's. Write instructions here now and they'll be ready whenever that gets built."
+            rows={4}
+            style={{ ...textarea, maxWidth: 640 }}
+          />
+        </div>
       </div>
     </div>
   );

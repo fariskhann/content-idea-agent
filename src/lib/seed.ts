@@ -1,5 +1,6 @@
 import { genId } from "./id";
 import { DEFAULT_MODEL_ID } from "./models";
+import { DEFAULT_YOUTUBE_ANALYSIS_INSTRUCTIONS } from "./youtube";
 import type { AppData } from "./types";
 
 export function defaultSeed(): AppData {
@@ -18,6 +19,8 @@ export function defaultSeed(): AppData {
     personalNotes: "",
     aiModel: DEFAULT_MODEL_ID,
     genBatchSize: 5,
+    youtubeAnalysisInstructions: DEFAULT_YOUTUBE_ANALYSIS_INSTRUCTIONS,
+    igTiktokAnalysisInstructions: "",
     categories: [
       {
         id: "yap",

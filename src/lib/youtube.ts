@@ -40,11 +40,15 @@ export async function fetchTranscript(videoId: string): Promise<{ status: "ok" |
   return data;
 }
 
+export const DEFAULT_YOUTUBE_ANALYSIS_INSTRUCTIONS =
+  "For each video, explain why it likely worked — or, if it's near or below the channel's average, what might be holding it back — pulling from the transcript where available (hook, structure, pacing) and the title framing. Then state specifically what we could borrow or adapt into our own content, not a generic takeaway.";
+
 export function buildYoutubeAnalysisPrompt(
   data: AppData,
   channelName: string,
   avgViews: number,
-  videos: YoutubeVideo[]
+  videos: YoutubeVideo[],
+  taggedCategories: Category[]
 ): string {
   const { brandBlock, personalBlock } = buildVoiceAndBrandBlocks(data);
   const frameworkText = data.categories
@@ -64,8 +68,14 @@ export function buildYoutubeAnalysisPrompt(
     prompt += v.transcriptStatus === "ok" && v.transcript ? `Transcript:\n${v.transcript.slice(0, 4000)}\n` : "Transcript: not available — infer from the title alone.\n";
     prompt += "\n";
   });
-  prompt +=
-    "For each video, explain why it likely worked — or, if it's near or below the channel's average, what might be holding it back — pulling from the transcript where available (hook, structure, pacing) and the title framing. Then state specifically what we could borrow or adapt into our own content types (Yap / Storytelling / Vlog / Brand — or whichever of our formats above fit), not a generic takeaway.\n\n";
+  prompt += (data.youtubeAnalysisInstructions || DEFAULT_YOUTUBE_ANALYSIS_INSTRUCTIONS) + "\n\n";
+  if (taggedCategories.length) {
+    const names = taggedCategories.map((c) => c.name).join(", ");
+    const formats = taggedCategories.flatMap((c) => c.angles.map((a) => a.name)).filter(Boolean).join(", ");
+    prompt += `This creator is tagged under our "${names}" content type${taggedCategories.length > 1 ? "s" : ""} here.${
+      formats ? ` Default the "borrow" suggestion to one of that type's formats (${formats})` : " Default the \"borrow\" suggestion to that content type"
+    } unless another of our content types is a clearly better fit for a specific video.\n\n`;
+  }
   prompt +=
     'Respond ONLY with a raw JSON array (no markdown fences, no commentary) of exactly ' +
     videos.length +

@@ -215,14 +215,14 @@ function useAppStore() {
   const removeHook = useCallback((id: string) => setData((d) => ({ ...d, hooks: d.hooks.filter((h) => h.id !== id) })), [setData]);
 
   // ---- inspiration ----
-  const addInspiration = useCallback(
-    () =>
-      setData((d) => ({
-        ...d,
-        inspirations: [{ id: genId(), name: "", handle: "", platform: "Instagram", link: "", tags: [], notes: "" }, ...d.inspirations],
-      })),
-    [setData]
-  );
+  const addInspiration = useCallback(() => {
+    const id = genId();
+    setData((d) => ({
+      ...d,
+      inspirations: [{ id, name: "", handle: "", platform: "Instagram", link: "", tags: [], notes: "" }, ...d.inspirations],
+    }));
+    return id;
+  }, [setData]);
   const updateInspiration = useCallback(
     <K extends keyof Inspiration>(id: string, field: K, value: Inspiration[K]) =>
       setData((d) => ({ ...d, inspirations: d.inspirations.map((i) => (i.id === id ? { ...i, [field]: value } : i)) })),

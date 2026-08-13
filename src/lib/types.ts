@@ -90,6 +90,10 @@ export interface AppData {
   /** References a ModelInfo.id from lib/models.ts */
   aiModel: string;
   genBatchSize: number;
+  /** Editable instructions sent to the AI when analyzing YouTube inspiration videos — see Frameworks. */
+  youtubeAnalysisInstructions: string;
+  /** Editable instructions for Instagram/TikTok inspiration analysis — not wired into a live AI call yet (no public fetch API for either). */
+  igTiktokAnalysisInstructions: string;
   categories: Category[];
   hooks: TextItem[];
   ideas: Idea[];
