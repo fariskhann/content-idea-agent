@@ -20,6 +20,10 @@ export async function POST(req: NextRequest) {
         model,
         max_tokens: maxTokens ?? 1200,
         messages: [{ role: "user", content: prompt }],
+        // This app only wants the final structured output, not chain-of-thought — thinking mode is
+        // on by default at "high" effort and its reasoning tokens share the max_tokens budget with
+        // the final answer, which can exhaust the budget before any real content is generated.
+        thinking: { type: "disabled" },
       }),
     });
 
@@ -30,8 +34,8 @@ export async function POST(req: NextRequest) {
     }
 
     const text = data?.choices?.[0]?.message?.content;
-    if (typeof text !== "string") {
-      return NextResponse.json({ error: "Unexpected response format from DeepSeek." }, { status: 502 });
+    if (typeof text !== "string" || !text.trim()) {
+      return NextResponse.json({ error: "DeepSeek returned an empty response — try again or increase the token budget." }, { status: 502 });
     }
 
     return NextResponse.json({
