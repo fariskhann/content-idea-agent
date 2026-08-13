@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { chipStyle, muted, pageSubtitle, pageTitle, primaryBtn, removeBtn, textarea as textareaStyle } from "@/lib/styles";
 import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
@@ -379,7 +380,14 @@ function InspirationDetail({ insp }: { insp: Inspiration }) {
         style={{ ...textareaStyle, maxWidth: 640 }}
       />
 
-      {insp.platform === "YouTube" && <YoutubeSection insp={insp} taggedCategories={taggedCategories} />}
+      {insp.platform === "YouTube" && (
+        <ErrorBoundary
+          fallbackTitle="Something in this creator's fetched YouTube data crashed the page. This is likely a malformed video/transcript record — resetting clears just that data (you'll need to re-fetch and re-analyze)."
+          onReset={() => app.updateInspirationYoutube(insp.id, { youtubeVideos: [], youtubeAnalysis: undefined, youtubeLastFetched: undefined })}
+        >
+          <YoutubeSection insp={insp} taggedCategories={taggedCategories} />
+        </ErrorBoundary>
+      )}
     </div>
   );
 }
