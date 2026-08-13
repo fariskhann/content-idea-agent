@@ -121,7 +121,9 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
         model,
         apiKeys: { anthropicApiKey: app.settings.anthropicApiKey, deepseekApiKey: app.settings.deepseekApiKey },
         prompt,
-        maxTokens: Math.min(4000, 400 + withTranscripts.length * 300),
+        // Real transcript content (via Supadata) makes for longer, more specific per-video answers
+        // than the old "transcript unavailable" world this budget was originally sized for.
+        maxTokens: Math.min(16000, 800 + withTranscripts.length * 600),
       });
       app.logUsage({
         feature: "youtube-analysis",
@@ -135,6 +137,10 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
       const parsed = parseJsonArray(text) as { videoId?: string; why?: string; borrow?: string }[] | null;
       if (!parsed || !parsed.length) {
         console.error("YouTube analysis: failed to parse model response as JSON array. Raw response:", text);
+        const looksTruncated = text.trim().length > 0 && !text.trim().endsWith("]") && !text.trim().endsWith("}");
+        if (looksTruncated) {
+          throw new Error("The model's response was cut off before finishing — try analyzing fewer videos at once.");
+        }
         const snippet = text.length > 300 ? text.slice(0, 300) + "…" : text;
         throw new Error(`Unexpected response format — model didn't return valid JSON. Raw response: "${snippet}"`);
       }
