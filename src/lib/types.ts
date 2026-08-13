@@ -58,7 +58,7 @@ export interface YoutubeOutlierResult {
 
 export interface YoutubeAnalysis {
   generatedAt: number;
-  medianViews: number;
+  avgViews: number;
   results: YoutubeOutlierResult[];
 }
 

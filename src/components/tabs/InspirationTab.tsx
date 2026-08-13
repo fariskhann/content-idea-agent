@@ -22,9 +22,27 @@ function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: ()
   const [error, setError] = useState("");
 
   const videos = insp.youtubeVideos || [];
-  const { medianViews, outliers } = computeOutliers(videos);
+  const { avgViews, outliers } = computeOutliers(videos);
   const outlierIds = new Set(outliers.map((v) => v.id));
   const analysisById = new Map<string, YoutubeOutlierResult>((insp.youtubeAnalysis?.results || []).map((r) => [r.videoId, r]));
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(outlierIds));
+
+  // Re-default the selection to the freshly computed outliers each time a fetch lands.
+  const [lastSeenFetch, setLastSeenFetch] = useState(insp.youtubeLastFetched);
+  if (lastSeenFetch !== insp.youtubeLastFetched) {
+    setLastSeenFetch(insp.youtubeLastFetched);
+    setSelectedIds(new Set(outliers.map((v) => v.id)));
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function handleFetch() {
     setError("");
@@ -61,34 +79,34 @@ function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: ()
       setError(`Add your ${providerLabel(selectedModel.provider)} API key in Settings first.`);
       return;
     }
-    const { medianViews: mv, outliers: outlierVideos } = computeOutliers(videos);
-    if (!outlierVideos.length) {
-      setError("No outliers in the current batch — nothing meaningfully above this channel's own median yet.");
+    const selectedVideos = videos.filter((v) => selectedIds.has(v.id));
+    if (!selectedVideos.length) {
+      setError("Tick at least one video to analyze.");
       return;
     }
     setAnalyzing(true);
     try {
       const updatedVideos = [...videos];
-      const outliersWithTranscripts: YoutubeVideo[] = [];
-      for (const outlier of outlierVideos) {
-        let current = outlier;
+      const withTranscripts: YoutubeVideo[] = [];
+      for (const selected of selectedVideos) {
+        let current = selected;
         if (current.transcriptStatus !== "ok" && current.transcriptStatus !== "unavailable") {
           const result = await fetchTranscript(current.id);
           current = { ...current, transcript: result.text, transcriptStatus: result.status };
           const idx = updatedVideos.findIndex((v) => v.id === current.id);
           if (idx !== -1) updatedVideos[idx] = current;
         }
-        outliersWithTranscripts.push(current);
+        withTranscripts.push(current);
       }
       app.updateInspirationYoutube(insp.id, { youtubeVideos: updatedVideos });
 
-      const prompt = buildYoutubeAnalysisPrompt(app.data, insp.name || insp.handle, mv, outliersWithTranscripts);
+      const prompt = buildYoutubeAnalysisPrompt(app.data, insp.name || insp.handle, avgViews, withTranscripts);
       const model = getModel(app.data.aiModel);
       const { text, usage } = await complete({
         model,
         apiKeys: { anthropicApiKey: app.settings.anthropicApiKey, deepseekApiKey: app.settings.deepseekApiKey },
         prompt,
-        maxTokens: Math.min(4000, 400 + outliersWithTranscripts.length * 300),
+        maxTokens: Math.min(4000, 400 + withTranscripts.length * 300),
       });
       app.logUsage({
         feature: "youtube-analysis",
@@ -102,7 +120,7 @@ function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: ()
       const parsed = parseJsonArray(text) as { videoId?: string; why?: string; borrow?: string }[] | null;
       if (!parsed || !parsed.length) throw new Error("unexpected response format");
       const results: YoutubeOutlierResult[] = parsed.map((p) => ({ videoId: p.videoId || "", why: p.why || "", borrow: p.borrow || "" }));
-      app.updateInspirationYoutube(insp.id, { youtubeAnalysis: { generatedAt: Date.now(), medianViews: mv, results } });
+      app.updateInspirationYoutube(insp.id, { youtubeAnalysis: { generatedAt: Date.now(), avgViews, results } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed — try again.");
     } finally {
@@ -150,10 +168,10 @@ function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: ()
           {videos.length > 0 && (
             <button
               onClick={handleAnalyze}
-              disabled={analyzing}
+              disabled={analyzing || selectedIds.size === 0}
               style={{ border: "1px solid var(--color-accent)", background: "var(--color-accent)", color: "var(--color-bg)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
             >
-              {analyzing ? "Analyzing…" : "Analyze outliers"}
+              {analyzing ? "Analysing…" : `Analyse videos (${selectedIds.size})`}
             </button>
           )}
         </div>
@@ -162,7 +180,8 @@ function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: ()
 
         {videos.length > 0 && (
           <div style={{ fontSize: 11, color: muted(55) }}>
-            Median views this batch: {fmtViews(medianViews)} · {outliers.length} outlier{outliers.length === 1 ? "" : "s"} flagged (≥1.75× median)
+            Average views this batch: {fmtViews(avgViews)} · {outliers.length} outlier{outliers.length === 1 ? "" : "s"} flagged (≥1.5× average) · outliers are
+            ticked by default, but you can tick/untick any video below
           </div>
         )}
 
@@ -175,6 +194,12 @@ function YoutubeVideosDialog({ insp, onClose }: { insp: Inspiration; onClose: ()
             const analysis = analysisById.get(v.id);
             return (
               <div key={v.id} style={{ display: "flex", gap: 10, background: "var(--color-surface)", padding: 10, border: isOutlier ? "1px solid var(--color-accent)" : `1px solid ${muted(15)}` }}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(v.id)}
+                  onChange={() => toggleSelected(v.id)}
+                  style={{ accentColor: "var(--color-accent)", width: 15, height: 15, flexShrink: 0, marginTop: 2 }}
+                />
                 {v.thumbnail && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={v.thumbnail} alt="" width={120} height={68} style={{ objectFit: "cover", flexShrink: 0 }} className="grayscale" />

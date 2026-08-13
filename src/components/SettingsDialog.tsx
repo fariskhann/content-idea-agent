@@ -2,6 +2,7 @@
 
 import { useApp } from "@/lib/AppContext";
 import { input, kicker, muted, primaryBtn, secondaryBtn } from "@/lib/styles";
+import { MODELS, providerLabel } from "@/lib/models";
 
 export function SettingsDialog() {
   const app = useApp();
@@ -17,11 +18,29 @@ export function SettingsDialog() {
         onClick={(e) => e.stopPropagation()}
       >
         <div>
-          <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>API keys</h2>
+          <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>Settings</h2>
           <p style={{ fontSize: 13, color: muted(60), margin: 0 }}>
             Stored only in this browser&apos;s local storage. Anthropic and YouTube calls go straight from your browser; DeepSeek calls route through this
             app&apos;s own server (its API doesn&apos;t support direct browser requests) but the key never touches anywhere else.
           </p>
+        </div>
+
+        <div>
+          <div style={kicker}>AI model</div>
+          <select value={app.data.aiModel} onChange={(e) => app.setAiModel(e.target.value)} style={{ ...input, cursor: "pointer" }}>
+            {(["anthropic", "deepseek"] as const).map((provider) => (
+              <optgroup key={provider} label={providerLabel(provider)}>
+                {MODELS.filter((m) => m.provider === provider).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} — ${m.inputPricePerM}/${m.outputPricePerM} per 1M
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
+            Controls every AI call in the app — Generate and Inspiration&apos;s video analysis both use this model.
+          </div>
         </div>
 
         <div>

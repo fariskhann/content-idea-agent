@@ -2,7 +2,6 @@
 
 import { useApp } from "@/lib/AppContext";
 import { chipStyle, kicker, muted, pageSubtitle, pageTitle, primaryBtn, secondaryBtn, textarea } from "@/lib/styles";
-import { MODELS, providerLabel } from "@/lib/models";
 import type { Platform } from "@/lib/types";
 
 const PLATFORMS: Platform[] = ["Any", "YouTube", "Instagram", "TikTok"];
@@ -87,40 +86,20 @@ export function GenerateTab() {
         style={{ ...textarea, marginBottom: 22 }}
       />
 
-      <div style={{ display: "flex", gap: 40, flexWrap: "wrap", marginBottom: 24 }}>
-        <div>
-          <div style={{ ...kicker, marginBottom: 10 }}>AI model</div>
-          <select
-            value={d.aiModel}
-            onChange={(e) => app.setAiModel(e.target.value)}
-            style={{ fontSize: 13, padding: "8px 10px", border: "1px solid var(--color-divider)", background: "var(--color-surface)", color: "var(--color-text)", minWidth: 260 }}
-          >
-            {(["anthropic", "deepseek"] as const).map((provider) => (
-              <optgroup key={provider} label={providerLabel(provider)}>
-                {MODELS.filter((m) => m.provider === provider).map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label} — ${m.inputPricePerM}/${m.outputPricePerM} per 1M
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ ...kicker, marginBottom: 10 }}>
+          Rounds to generate: {d.genBatchSize}{" "}
+          <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: muted(50) }}>× formats × structures</span>
         </div>
-        <div>
-          <div style={{ ...kicker, marginBottom: 10 }}>
-            Rounds to generate: {d.genBatchSize}{" "}
-            <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: muted(50) }}>× formats × structures</span>
-          </div>
-          <input
-            type="range"
-            min={1}
-            max={10}
-            step={1}
-            value={d.genBatchSize}
-            onChange={(e) => app.setGenBatchSize(parseInt(e.target.value, 10))}
-            style={{ width: 220, accentColor: "var(--color-accent)" }}
-          />
-        </div>
+        <input
+          type="range"
+          min={1}
+          max={10}
+          step={1}
+          value={d.genBatchSize}
+          onChange={(e) => app.setGenBatchSize(parseInt(e.target.value, 10))}
+          style={{ width: 220, accentColor: "var(--color-accent)" }}
+        />
       </div>
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>

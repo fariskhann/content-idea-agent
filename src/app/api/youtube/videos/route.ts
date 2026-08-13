@@ -33,8 +33,10 @@ async function googleGet(path: string, params: Record<string, string>) {
   return data;
 }
 
-/** Shorts have no dedicated Data API flag — duration under a minute is the standard heuristic third-party tools use. */
-const SHORTS_MAX_SECONDS = 60;
+// Shorts have no dedicated Data API flag. YouTube caps Shorts at 3 minutes, so anything longer
+// is definitely a regular upload; anything at or under that gets a real check below.
+const SHORTS_DURATION_CEILING = 200;
+const SHORTS_DURATION_FALLBACK = 60;
 
 function parseDurationSeconds(iso: string): number {
   const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
@@ -45,10 +47,24 @@ function parseDurationSeconds(iso: string): number {
   return h * 3600 + m * 60 + s;
 }
 
+/** A real Short stays on /shorts/{id} (200); YouTube 303-redirects a regular video ID to /watch. No API quota used. */
+async function isShort(videoId: string, durationSeconds: number): Promise<boolean> {
+  if (durationSeconds > SHORTS_DURATION_CEILING) return false;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(`https://www.youtube.com/shorts/${videoId}`, { method: "HEAD", redirect: "manual", signal: controller.signal });
+    clearTimeout(timeout);
+    return res.status >= 200 && res.status < 300;
+  } catch {
+    return durationSeconds <= SHORTS_DURATION_FALLBACK;
+  }
+}
+
 export async function GET(req: NextRequest) {
   const apiKey = req.nextUrl.searchParams.get("apiKey") || "";
   const ref = req.nextUrl.searchParams.get("ref") || "";
-  const maxResults = Math.min(30, Math.max(1, parseInt(req.nextUrl.searchParams.get("maxResults") || "10", 10) || 10));
+  const maxResults = Math.min(50, Math.max(1, parseInt(req.nextUrl.searchParams.get("maxResults") || "10", 10) || 10));
 
   if (!apiKey) return NextResponse.json({ error: "Missing YouTube API key. Add it in Settings." }, { status: 400 });
   if (!ref) return NextResponse.json({ error: "Missing channel link or handle." }, { status: 400 });
@@ -148,11 +164,11 @@ export async function GET(req: NextRequest) {
         }
       );
       // Preserve upload order (most recent first), not the videos.list response order.
-      pageVideoIds
-        .map((id) => byId.get(id))
-        .filter((v): v is NonNullable<typeof v> => !!v)
-        .filter((v) => v.durationSeconds > SHORTS_MAX_SECONDS)
-        .forEach((v) => videos.push({ id: v.id, title: v.title, thumbnail: v.thumbnail, viewCount: v.viewCount, publishedAt: v.publishedAt }));
+      const orderedBatch = pageVideoIds.map((id) => byId.get(id)).filter((v): v is NonNullable<typeof v> => !!v);
+      const shortFlags = await Promise.all(orderedBatch.map((v) => isShort(v.id, v.durationSeconds)));
+      orderedBatch.forEach((v, i) => {
+        if (!shortFlags[i]) videos.push({ id: v.id, title: v.title, thumbnail: v.thumbnail, viewCount: v.viewCount, publishedAt: v.publishedAt });
+      });
 
       pageToken = playlistData.nextPageToken;
       if (!pageToken) break;
