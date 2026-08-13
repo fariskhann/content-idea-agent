@@ -1,64 +1,106 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useApp } from "@/lib/AppContext";
 import { muted } from "@/lib/styles";
 import type { TabId } from "@/lib/types";
 
-const TABS: { id: TabId; label: string; count?: (n: ReturnType<typeof useApp>) => number }[] = [
-  { id: "brand", label: "About" },
-  { id: "generate", label: "Generate" },
-  { id: "ideas", label: "Ideas board", count: (app) => app.data.ideas.length },
-  { id: "frameworks", label: "Frameworks" },
-  { id: "inspiration", label: "Inspiration", count: (app) => app.data.inspirations.length },
+const TABS: { id: TabId; label: string; short: string; count?: (n: ReturnType<typeof useApp>) => number }[] = [
+  { id: "brand", label: "About", short: "Ab" },
+  { id: "generate", label: "Generate", short: "Ge" },
+  { id: "ideas", label: "Ideas board", short: "Id", count: (app) => app.data.ideas.length },
+  { id: "frameworks", label: "Frameworks", short: "Fr" },
+  { id: "inspiration", label: "Inspiration", short: "In", count: (app) => app.data.inspirations.length },
 ];
+
+const COLLAPSED_KEY = "cia_sidebar_collapsed_v1";
 
 export function Nav() {
   const app = useApp();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem(COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
 
   return (
     <nav
       style={{
-        width: 250,
+        width: collapsed ? 56 : 250,
         flexShrink: 0,
         borderRight: "2px solid var(--color-divider)",
-        padding: "32px 24px",
+        padding: collapsed ? "16px 8px" : "32px 24px",
         display: "flex",
         flexDirection: "column",
-        gap: 28,
+        gap: collapsed ? 14 : 28,
         position: "sticky",
         top: 0,
         height: "100vh",
         overflowY: "auto",
+        overflowX: "hidden",
         background: "var(--color-bg)",
       }}
     >
-      <div>
-        <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: muted(55), marginBottom: 6 }}>Brand</div>
-        <input
-          value={app.data.brandName}
-          onChange={(e) => app.setBrandField("brandName")(e.target.value)}
-          placeholder="Your brand"
-          style={{
-            width: "100%",
-            border: "none",
-            borderBottom: "2px solid transparent",
-            background: "transparent",
-            fontFamily: "var(--font-heading)",
-            fontWeight: 800,
-            fontSize: 22,
-            letterSpacing: "-0.015em",
-            color: "var(--color-text)",
-            padding: "2px 0",
-          }}
-          onFocus={(e) => (e.currentTarget.style.borderBottom = "2px solid var(--color-accent)")}
-          onBlur={(e) => (e.currentTarget.style.borderBottom = "2px solid transparent")}
-        />
-        <div style={{ fontSize: 12, color: muted(55), marginTop: 4 }}>Content idea agent</div>
-      </div>
+      <button
+        onClick={toggleCollapsed}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        style={{
+          alignSelf: collapsed ? "center" : "flex-end",
+          border: `1px solid ${muted(25)}`,
+          background: "transparent",
+          color: muted(70),
+          cursor: "pointer",
+          fontSize: 12,
+          fontWeight: 700,
+          padding: collapsed ? "5px 8px" : "4px 10px",
+        }}
+      >
+        {collapsed ? "»" : "« Collapse"}
+      </button>
 
-      <div style={{ display: "flex", flexDirection: "column" }}>
+      {!collapsed && (
+        <div>
+          <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: muted(55), marginBottom: 6 }}>Brand</div>
+          <input
+            value={app.data.brandName}
+            onChange={(e) => app.setBrandField("brandName")(e.target.value)}
+            placeholder="Your brand"
+            style={{
+              width: "100%",
+              border: "none",
+              borderBottom: "2px solid transparent",
+              background: "transparent",
+              fontFamily: "var(--font-heading)",
+              fontWeight: 800,
+              fontSize: 22,
+              letterSpacing: "-0.015em",
+              color: "var(--color-text)",
+              padding: "2px 0",
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderBottom = "2px solid var(--color-accent)")}
+            onBlur={(e) => (e.currentTarget.style.borderBottom = "2px solid transparent")}
+          />
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 4 }}>Content idea agent</div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: collapsed ? 6 : 0 }}>
         {TABS.map((tab) => {
           const active = app.activeTab === tab.id;
           const count = tab.count ? tab.count(app) : undefined;
@@ -66,23 +108,25 @@ export function Nav() {
             <button
               key={tab.id}
               onClick={() => app.setActiveTab(tab.id)}
+              title={tab.label}
               style={{
-                textAlign: "left",
-                padding: "10px 12px",
-                borderLeft: `2px solid ${active ? "var(--color-accent)" : "transparent"}`,
+                textAlign: collapsed ? "center" : "left",
+                padding: collapsed ? "10px 4px" : "10px 12px",
+                borderLeft: collapsed ? "none" : `2px solid ${active ? "var(--color-accent)" : "transparent"}`,
+                borderBottom: collapsed ? `2px solid ${active ? "var(--color-accent)" : "transparent"}` : "none",
                 background: active ? "var(--color-surface)" : "transparent",
                 color: active ? "var(--color-accent-700)" : "var(--color-text)",
                 cursor: active ? "default" : "pointer",
-                fontSize: 15,
+                fontSize: collapsed ? 12 : 15,
                 fontWeight: active ? 800 : 400,
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
+                justifyContent: collapsed ? "center" : "space-between",
                 gap: 8,
               }}
             >
-              <span>{tab.label}</span>
-              {count !== undefined && (
+              <span>{collapsed ? tab.short : tab.label}</span>
+              {count !== undefined && !collapsed && (
                 <span style={{ fontSize: 11, background: "var(--color-neutral-100)", color: "var(--color-neutral-800)", padding: "2px 8px" }}>{count}</span>
               )}
             </button>
@@ -92,6 +136,7 @@ export function Nav() {
 
       <div style={{ flex: 1 }} />
 
+      {!collapsed && (
       <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "2px solid var(--color-divider)", paddingTop: 16 }}>
         <button
           onClick={() => app.setSettingsOpen(true)}
@@ -129,6 +174,7 @@ export function Nav() {
         </label>
         <div style={{ fontSize: 11, color: muted(55) }}>Saved locally in this browser</div>
       </div>
+      )}
     </nav>
   );
 }

@@ -339,7 +339,7 @@ function InspirationDetail({ insp }: { insp: Inspiration }) {
   const taggedCategories = app.data.categories.filter((c) => insp.tags.includes(c.id));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 900 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <input
         value={insp.name}
         onChange={(e) => app.updateInspiration(insp.id, "name", e.target.value)}
@@ -436,8 +436,8 @@ export function InspirationTab() {
   }
 
   return (
-    <div style={{ maxWidth: 1100 }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 26 }}>
+    <div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 20 }}>
         <div>
           <h1 style={pageTitle}>Inspiration</h1>
           <p style={{ ...pageSubtitle, margin: 0 }}>
@@ -455,41 +455,40 @@ export function InspirationTab() {
           No inspiration saved yet — add a page or creator you admire.
         </div>
       ) : (
-        <div style={{ display: "flex", gap: 28 }}>
-          <div style={{ width: 220, flexShrink: 0, display: "flex", flexDirection: "column", gap: 2, borderRight: "1px solid var(--color-divider)", paddingRight: 16 }}>
+        <div>
+          <div style={{ display: "flex", gap: 2, overflowX: "auto", borderBottom: `1px solid ${muted(25)}`, marginBottom: 24 }}>
             {inspirations.map((insp) => {
               const active = selected?.id === insp.id;
               return (
-                <div key={insp.id} style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                <div key={insp.id} style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
                   <button
                     onClick={() => setSelectedId(insp.id)}
                     style={{
-                      flex: 1,
-                      minWidth: 0,
                       textAlign: "left",
-                      padding: "9px 10px",
-                      borderLeft: `2px solid ${active ? "var(--color-accent)" : "transparent"}`,
+                      padding: "9px 12px",
+                      borderBottom: `2px solid ${active ? "var(--color-accent)" : "transparent"}`,
                       background: active ? "var(--color-surface)" : "transparent",
                       color: active ? "var(--color-accent-700)" : "var(--color-text)",
                       cursor: active ? "default" : "pointer",
                       fontSize: 13,
                       fontWeight: active ? 800 : 400,
                       display: "flex",
-                      flexDirection: "column",
-                      gap: 2,
+                      alignItems: "baseline",
+                      gap: 6,
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{insp.name || insp.handle || "Untitled"}</span>
+                    <span>{insp.name || insp.handle || "Untitled"}</span>
                     <span style={{ fontSize: 10, color: muted(50), fontWeight: 400 }}>{insp.platform}</span>
                   </button>
-                  <button onClick={() => handleRemove(insp.id)} style={{ ...removeBtn, fontSize: 15, flexShrink: 0 }}>
+                  <button onClick={() => handleRemove(insp.id)} style={{ ...removeBtn, fontSize: 14, flexShrink: 0 }}>
                     ×
                   </button>
                 </div>
               );
             })}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>{selected && <InspirationDetail insp={selected} />}</div>
+          {selected && <InspirationDetail insp={selected} />}
         </div>
       )}
     </div>
