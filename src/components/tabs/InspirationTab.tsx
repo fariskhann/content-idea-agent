@@ -7,12 +7,33 @@ import { chipStyle, muted, pageSubtitle, pageTitle, primaryBtn, removeBtn, texta
 import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt } from "@/lib/youtube";
-import type { Category, Inspiration, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
+import type { AnalysisField as AnalysisFieldType, Category, Inspiration, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
 
 function fmtViews(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
   if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
   return String(n);
+}
+
+/** "titleBreakdown" -> "Title breakdown" */
+function labelFromKey(key: string): string {
+  const spaced = key.replace(/([A-Z])/g, " $1").trim().toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Renders a `why`/`borrow` field that may be a plain string or a structured breakdown object from custom Analysis instructions. */
+function AnalysisFieldView({ value }: { value: AnalysisFieldType }) {
+  if (typeof value === "string") return <>{value}</>;
+  if (!value || typeof value !== "object") return <>{String(value)}</>;
+  return (
+    <span style={{ display: "block" }}>
+      {Object.entries(value).map(([key, v]) => (
+        <span key={key} style={{ display: "block", marginTop: 2 }}>
+          <em>{labelFromKey(key)}:</em> {typeof v === "string" ? v : JSON.stringify(v)}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedCategories: Category[] }) {
@@ -136,7 +157,10 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
         // are now far longer than the old generic 2-3 sentence default — likely because custom
         // Analysis instructions are actually being followed now (see the schema-override fix).
         // Capped at 60000 to stay under Claude Haiku 4.5's 64K output ceiling with margin.
-        maxTokens: Math.min(60000, 4000 + withTranscripts.length * 3000),
+        // 7000 (previous budget for a single video) still cut off — structured multi-part
+        // breakdowns from custom Analysis instructions need much more room per video than a
+        // plain 2-3 sentence answer. max_tokens is a ceiling, not a guaranteed spend, so err high.
+        maxTokens: Math.min(60000, Math.max(20000, withTranscripts.length * 6000)),
       });
       app.logUsage({
         feature: "youtube-analysis",
@@ -147,7 +171,7 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
         outputTokens: usage.outputTokens,
         costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
       });
-      const parsed = parseJsonArray(text) as { videoId?: string; why?: string; borrow?: string }[] | null;
+      const parsed = parseJsonArray(text) as { videoId?: string; why?: AnalysisFieldType; borrow?: AnalysisFieldType }[] | null;
       if (!parsed || !parsed.length) {
         console.error("YouTube analysis: failed to parse model response as JSON array. Raw response:", text);
         const looksTruncated = text.trim().length > 0 && !text.trim().endsWith("]") && !text.trim().endsWith("}");
@@ -291,10 +315,10 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
                   {analysis && (
                     <div style={{ fontSize: 12, color: "var(--color-text)", marginTop: 2 }}>
                       <div>
-                        <strong>Why it worked:</strong> {analysis.why}
+                        <strong>Why it worked:</strong> <AnalysisFieldView value={analysis.why} />
                       </div>
                       <div>
-                        <strong>What to borrow:</strong> {analysis.borrow}
+                        <strong>What to borrow:</strong> <AnalysisFieldView value={analysis.borrow} />
                       </div>
                     </div>
                   )}

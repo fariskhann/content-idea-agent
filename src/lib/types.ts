@@ -50,10 +50,13 @@ export interface YoutubeVideo {
   transcriptStatus: TranscriptStatus;
 }
 
+/** A plain string, or a structured breakdown (e.g. {titleBreakdown, structuralMap, verdict}) when custom Analysis instructions ask for one. */
+export type AnalysisField = string | Record<string, unknown>;
+
 export interface YoutubeOutlierResult {
   videoId: string;
-  why: string;
-  borrow: string;
+  why: AnalysisField;
+  borrow: AnalysisField;
 }
 
 export interface YoutubeAnalysis {
