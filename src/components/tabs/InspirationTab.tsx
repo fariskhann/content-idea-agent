@@ -133,7 +133,11 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
         costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
       });
       const parsed = parseJsonArray(text) as { videoId?: string; why?: string; borrow?: string }[] | null;
-      if (!parsed || !parsed.length) throw new Error("unexpected response format");
+      if (!parsed || !parsed.length) {
+        console.error("YouTube analysis: failed to parse model response as JSON array. Raw response:", text);
+        const snippet = text.length > 300 ? text.slice(0, 300) + "…" : text;
+        throw new Error(`Unexpected response format — model didn't return valid JSON. Raw response: "${snippet}"`);
+      }
       const results: YoutubeOutlierResult[] = parsed.map((p) => ({ videoId: p.videoId || "", why: p.why || "", borrow: p.borrow || "" }));
       app.updateInspirationYoutube(insp.id, { youtubeAnalysis: { generatedAt: Date.now(), avgViews, results } });
     } catch (err) {
