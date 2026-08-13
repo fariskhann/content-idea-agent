@@ -12,6 +12,24 @@ function maskKeyPreview(key: string): string {
   return key.slice(0, 6) + "…" + key.slice(-4);
 }
 
+function EyeIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {open ? (
+        <>
+          <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
+          <circle cx="12" cy="12" r="3" />
+        </>
+      ) : (
+        <>
+          <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a20.3 20.3 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a20.3 20.3 0 0 1-3.22 4.28" />
+          <path d="M1 1l22 22" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 function KeyInput({
   value,
   onChange,
@@ -26,20 +44,37 @@ function KeyInput({
   onToggleReveal: () => void;
 }) {
   return (
-    <>
-      <div style={{ display: "flex", gap: 6 }}>
-        <input type="password" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ ...input, flex: 1 }} />
-        <button
-          type="button"
-          onClick={onToggleReveal}
-          disabled={!value}
-          style={{ ...secondaryBtn, padding: "0 12px", fontSize: 12, flexShrink: 0, cursor: value ? "pointer" : "default", opacity: value ? 1 : 0.5 }}
-        >
-          {revealed ? "Hide" : "View"}
-        </button>
-      </div>
-      {revealed && value && <div style={{ fontSize: 12, fontFamily: "monospace", color: muted(70), marginTop: 4 }}>{maskKeyPreview(value)}</div>}
-    </>
+    <div style={{ position: "relative" }}>
+      <input
+        type={revealed ? "text" : "password"}
+        value={revealed ? maskKeyPreview(value) : value}
+        onChange={(e) => !revealed && onChange(e.target.value)}
+        readOnly={revealed}
+        placeholder={placeholder}
+        style={{ ...input, paddingRight: 34 }}
+      />
+      <button
+        type="button"
+        onClick={onToggleReveal}
+        disabled={!value}
+        title={revealed ? "Hide key" : "View key"}
+        style={{
+          position: "absolute",
+          right: 4,
+          top: "50%",
+          transform: "translateY(-50%)",
+          border: "none",
+          background: "none",
+          padding: 4,
+          display: "flex",
+          color: muted(60),
+          cursor: value ? "pointer" : "default",
+          opacity: value ? 1 : 0.4,
+        }}
+      >
+        <EyeIcon open={revealed} />
+      </button>
+    </div>
   );
 }
 
