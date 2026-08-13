@@ -153,6 +153,13 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
     }
   }
 
+  /** Clears cached transcript status/text and any prior AI notes so the next analyze run starts clean — useful after fixing the transcript provider, since "unavailable" videos are otherwise never retried automatically. */
+  function handleReset() {
+    const resetVideos = videos.map((v) => ({ ...v, transcript: undefined, transcriptStatus: "not_fetched" as const }));
+    app.updateInspirationYoutube(insp.id, { youtubeVideos: resetVideos, youtubeAnalysis: undefined });
+    setError("");
+  }
+
   return (
     <div style={{ borderTop: `1px solid ${muted(25)}`, marginTop: 8, paddingTop: 18, display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>
@@ -184,6 +191,16 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
             style={{ border: "1px solid var(--color-accent)", background: "var(--color-accent)", color: "var(--color-bg)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
           >
             {analyzing ? "Analysing…" : `Analyse videos (${selectedIds.size})`}
+          </button>
+        )}
+        {videos.length > 0 && (
+          <button
+            onClick={handleReset}
+            disabled={analyzing || fetching}
+            title="Clears cached transcript status and AI notes so the next analysis re-fetches and re-analyzes from scratch."
+            style={{ border: `1px solid ${muted(35)}`, background: "transparent", color: muted(70), padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            Reset
           </button>
         )}
       </div>

@@ -70,10 +70,12 @@ export function buildYoutubeAnalysisPrompt(
       return `${c.name} (${c.stage}, ${c.owner === "personal" ? "Personal" : "Brand"})${structuresText ? ", structures: " + structuresText : ""}: ${c.desc} Formats: ${angleLines}`;
     })
     .join("\n");
+  const hooksText = data.hooks.map((h) => h.text).filter(Boolean).join(", ");
 
   let prompt = brandBlock + (personalBlock ? "\n" + personalBlock : "") + "\n";
   prompt += `You're analyzing recent videos from the YouTube channel "${channelName}" to find what's working and what we could apply to our own content.\n\n`;
   prompt += `Our content framework (content type — stage — owner — formats and structures):\n${frameworkText}\n\n`;
+  if (hooksText) prompt += `Our hook formulas: ${hooksText}\n\n`;
   prompt += `This channel's average view count across its last pulled batch is ${avgViews.toLocaleString()}. Analyze the following hand-picked videos:\n\n`;
   videos.forEach((v, i) => {
     prompt += `${i + 1}. Video ID: ${v.id}\nTitle: "${v.title}"\nViews: ${v.viewCount.toLocaleString()} (${(v.viewCount / (avgViews || 1)).toFixed(1)}x the channel's average)\n`;
@@ -88,6 +90,7 @@ export function buildYoutubeAnalysisPrompt(
       formats ? ` Default the "borrow" suggestion to one of that type's formats (${formats})` : " Default the \"borrow\" suggestion to that content type"
     } unless another of our content types is a clearly better fit for a specific video.\n\n`;
   }
+  if (hooksText) prompt += `Where a video's hook style maps onto one of our own hook formulas above, name that formula specifically in "borrow" instead of describing it generically.\n\n`;
   prompt +=
     'Respond ONLY with a raw JSON array (no markdown fences, no commentary) of exactly ' +
     videos.length +
