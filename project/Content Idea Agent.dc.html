@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/modernist-026b9592-3a9f-4270-ab1b-1c2ff2b155cd/styles.css" />
+<script src="_ds/modernist-026b9592-3a9f-4270-ab1b-1c2ff2b155cd/_ds_bundle.js"></script>
+<style>
+  input,textarea,select,button{font-family:inherit;}
+  textarea{resize:vertical;}
+  a{color:var(--color-accent-700);}
+  a:hover{color:var(--color-accent-800);}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-heading);font-size:15px;line-height:1.55;">
+
+  <nav style="width:250px;flex-shrink:0;border-right:2px solid var(--color-divider);padding:32px 24px;display:flex;flex-direction:column;gap:28px;position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--color-bg);">
+    <div>
+      <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-bottom:6px;">Brand</div>
+      <input value="{{ brandName }}" onChange="{{ setBrandName }}" placeholder="Your brand" style="width:100%;border:none;border-bottom:2px solid transparent;background:transparent;font-family:var(--font-heading);font-weight:800;font-size:22px;letter-spacing:-0.015em;color:var(--color-text);padding:2px 0;" style-focus="border-bottom:2px solid var(--color-accent);" />
+      <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:4px;">Content idea agent</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;">
+      <sc-if value="{{ isBrand }}" hint-placeholder-val="{{ false }}">
+        <button style="text-align:left;padding:10px 12px;border-left:2px solid var(--color-accent);background:var(--color-surface);color:var(--color-accent-700);cursor:default;font-size:15px;font-weight:800;">About</button>
+      </sc-if>
+      <sc-if value="{{ isBrandInactive }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ setTabBrand }}" style="text-align:left;padding:10px 12px;border-left:2px solid transparent;background:transparent;color:var(--color-text);cursor:pointer;font-size:15px;font-weight:400;" style-hover="background:var(--color-surface);">About</button>
+      </sc-if>
+
+      <sc-if value="{{ isGenerate }}" hint-placeholder-val="{{ true }}">
+        <button style="text-align:left;padding:10px 12px;border-left:2px solid var(--color-accent);background:var(--color-surface);color:var(--color-accent-700);cursor:default;font-size:15px;font-weight:800;">Generate</button>
+      </sc-if>
+      <sc-if value="{{ isGenerateInactive }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ setTabGenerate }}" style="text-align:left;padding:10px 12px;border-left:2px solid transparent;background:transparent;color:var(--color-text);cursor:pointer;font-size:15px;font-weight:400;" style-hover="background:var(--color-surface);">Generate</button>
+      </sc-if>
+
+      <sc-if value="{{ isIdeas }}" hint-placeholder-val="{{ false }}">
+        <button style="text-align:left;padding:10px 12px;border-left:2px solid var(--color-accent);background:var(--color-surface);color:var(--color-accent-700);cursor:default;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <span>Ideas board</span><span style="font-size:11px;background:var(--color-neutral-100);color:var(--color-neutral-800);padding:2px 8px;">{{ ideasCount }}</span>
+        </button>
+      </sc-if>
+      <sc-if value="{{ isIdeasInactive }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ setTabIdeas }}" style="text-align:left;padding:10px 12px;border-left:2px solid transparent;background:transparent;color:var(--color-text);cursor:pointer;font-size:15px;font-weight:400;display:flex;align-items:center;justify-content:space-between;gap:8px;" style-hover="background:var(--color-surface);">
+          <span>Ideas board</span><span style="font-size:11px;background:var(--color-neutral-100);color:var(--color-neutral-800);padding:2px 8px;">{{ ideasCount }}</span>
+        </button>
+      </sc-if>
+
+      <sc-if value="{{ isFrameworks }}" hint-placeholder-val="{{ false }}">
+        <button style="text-align:left;padding:10px 12px;border-left:2px solid var(--color-accent);background:var(--color-surface);color:var(--color-accent-700);cursor:default;font-size:15px;font-weight:800;">Frameworks</button>
+      </sc-if>
+      <sc-if value="{{ isFrameworksInactive }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ setTabFrameworks }}" style="text-align:left;padding:10px 12px;border-left:2px solid transparent;background:transparent;color:var(--color-text);cursor:pointer;font-size:15px;font-weight:400;" style-hover="background:var(--color-surface);">Frameworks</button>
+      </sc-if>
+
+      <sc-if value="{{ isInspiration }}" hint-placeholder-val="{{ false }}">
+        <button style="text-align:left;padding:10px 12px;border-left:2px solid var(--color-accent);background:var(--color-surface);color:var(--color-accent-700);cursor:default;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <span>Inspiration</span><span style="font-size:11px;background:var(--color-neutral-100);color:var(--color-neutral-800);padding:2px 8px;">{{ inspirationCount }}</span>
+        </button>
+      </sc-if>
+      <sc-if value="{{ isInspirationInactive }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ setTabInspiration }}" style="text-align:left;padding:10px 12px;border-left:2px solid transparent;background:transparent;color:var(--color-text);cursor:pointer;font-size:15px;font-weight:400;display:flex;align-items:center;justify-content:space-between;gap:8px;" style-hover="background:var(--color-surface);">
+          <span>Inspiration</span><span style="font-size:11px;background:var(--color-neutral-100);color:var(--color-neutral-800);padding:2px 8px;">{{ inspirationCount }}</span>
+        </button>
+      </sc-if>
+    </div>
+
+    <div style="flex:1;"></div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;border-top:2px solid var(--color-divider);padding-top:16px;">
+      <button onClick="{{ exportHandler }}" style="width:100%;padding:8px 12px;border:1px solid var(--color-divider);background:transparent;color:var(--color-text);cursor:pointer;font-size:13px;font-weight:600;text-align:left;" style-hover="background:color-mix(in srgb, var(--color-text) 7%, transparent);">Export data (.json)</button>
+      <label style="width:100%;padding:8px 12px;border:1px solid var(--color-divider);background:transparent;color:var(--color-text);cursor:pointer;font-size:13px;font-weight:600;text-align:left;display:block;" style-hover="background:color-mix(in srgb, var(--color-text) 7%, transparent);">
+        Import data
+        <input type="file" accept="application/json" onChange="{{ importHandler }}" style="display:none;" />
+      </label>
+      <div style="font-size:11px;color:color-mix(in srgb, var(--color-text) 55%, transparent);">Saved locally in this browser</div>
+    </div>
+  </nav>
+
+  <main style="flex:1;padding:48px 56px;overflow-y:auto;max-height:100vh;">
+
+    <sc-if value="{{ isBrand }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:720px;">
+        <h1 style="font-family:var(--font-heading);font-weight:800;font-size:38px;letter-spacing:-0.015em;margin:0 0 8px;">About</h1>
+        <p style="font-size:15px;color:color-mix(in srgb, var(--color-text) 65%, transparent);margin:0 0 28px;max-width:600px;">What the agent knows before it writes anything — the brand, and you as a personal creator. Edit either any time; every content type is tagged Personal or Brand, and generation reads the matching outline.</p>
+
+        <h2 style="font-family:var(--font-heading);font-weight:800;font-size:22px;margin:0 0 18px;">Brand outline</h2>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:8px;">Brand name</div>
+          <input value="{{ brandName }}" onChange="{{ setBrandName }}" placeholder="Your brand" style="width:100%;border:1px solid var(--color-divider);background:var(--color-surface);font-family:var(--font-heading);font-weight:800;font-size:18px;color:var(--color-text);padding:10px 12px;" style-focus="border:1px solid var(--color-accent);" />
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:8px;">One-liner</div>
+          <input value="{{ brandOneLiner }}" onChange="{{ setBrandOneLiner }}" placeholder="What is it, in one line?" style="width:100%;border:1px solid var(--color-divider);background:var(--color-surface);font-size:14px;color:var(--color-text);padding:10px 12px;" style-focus="border:1px solid var(--color-accent);" />
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:8px;">Target audience</div>
+          <textarea value="{{ brandAudience }}" onChange="{{ setBrandAudience }}" placeholder="Who this is for" rows="2" style="width:100%;border:1px solid var(--color-divider);background:var(--color-surface);font-size:14px;color:var(--color-text);padding:10px 12px;" style-focus="border:1px solid var(--color-accent);"></textarea>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:8px;">Voice & tone</div>
+          <textarea value="{{ brandVoice }}" onChange="{{ setBrandVoice }}" placeholder="How the brand sounds — direct, funny, no-BS..." rows="2" style="width:100%;border:1px solid var(--color-divider);background:var(--color-surface);font-size:14px;color:var(--color-text);padding:10px 12px;" style-focus="border:1px solid var(--color-accent);"></textarea>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:10px;">Key differentiators</div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+            <sc-for list="{{ brandPillarsEnriched }}" as="p" hint-placeholder-count="3">
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input value="{{ p.text }}" onChange="{{ p.setText }}" placeholder="What sets you apart" style="flex:1;border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-surface);font-size:13px;color:var(--color-text);padding:7px 10px;" style-focus="border:1px solid var(--color-accent);" />
+                <button onClick="{{ p.remove }}" style="border:none;background:transparent;color:color-mix(in srgb, var(--color-text) 50%, transparent);cursor:pointer;font-size:15px;" style-hover="color:var(--color-accent-700);">×</button>
+              </div>
+            </sc-for>
+          </div>
+          <button onClick="{{ addBrandPillarHandler }}" style="border:1px solid var(--color-divider);background:transparent;color:var(--color-text);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;" style-hover="background:color-mix(in srgb, var(--color-text) 7%, transparent);">+ Add differentiator</button>
+        </div>
+
+        <div style="margin-bottom:32px;">
+          <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:8px;">Anything else the AI should know</div>
+          <textarea value="{{ brandNotes }}" onChange="{{ setBrandNotes }}" placeholder="Rules, things to avoid, past wins, house style..." rows="3" style="width:100%;border:1px solid var(--color-divider);background:var(--color-surface);font-size:14px;color:var(--color-text);padding:10px 12px;" style-focus="border:1px solid var(--color-accent);"></textarea>
+        </div>
+
+        <div style="border-top:2px solid var(--color-divider);padding-top:24px;">
+          <h2 style="font-family:var(--font-heading);font-weight:800;font-size:22px;margin:0 0 4px;">Personal outline</h2>
+          <p style="font-size:13px;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin:0 0 18px;">You, as the creator. Used for content types tagged Personal.</p>
+
+          <div style="margin-bottom:20px;">
+            <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:8px;">Your name</div>
+            <input value="{{ personalName }}" onChange="{{ setPersonalName }}" placeholder="Your name" style="width:100%;border:1px solid var(--color-divider);background:var(--color-surface);font-family:var(--font-heading);font-weight:800;font-size:18px;color:var(--color-text);padding:10px 12px;" style-focus="border:1px solid var(--color-accent);" />
+          </div>
+
+          <div style="margin-bottom:20px;">
+            <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:8px;">One-liner</div>
+            <input value="{{ personalOneLiner }}" onChange="{{ setPersonalOneLiner }}" placeholder="Who are you, in one line?" style="width:100%;border:1px solid var(--color-divider);background:var(--color-surface);font-size:14px;color:var(--color-text);padding:10px 12px;" style-focus="border:1px solid var(--color-accent);" />
+          </div>
+
+          <div style="margin-bottom:20px;">
+            <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:8px;">Voice & tone</div>
+            <textarea value="{{ personalVoice }}" onChange="{{ setPersonalVoice }}" placeholder="How you sound — direct, funny, no-BS..." rows="2" style="width:100%;border:1px solid var(--color-divider);background:var(--color-surface);font-size:14px;color:var(--color-text);padding:10px 12px;" style-focus="border:1px solid var(--color-accent);"></textarea>
+          </div>
+
+          <div style="margin-bottom:20px;">
+            <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:10px;">Known for</div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+              <sc-for list="{{ personalTraitsEnriched }}" as="p" hint-placeholder-count="3">
+                <div style="display:flex;gap:6px;align-items:center;">
+                  <input value="{{ p.text }}" onChange="{{ p.setText }}" placeholder="A trait, belief, or thing people know you for" style="flex:1;border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-surface);font-size:13px;color:var(--color-text);padding:7px 10px;" style-focus="border:1px solid var(--color-accent);" />
+                  <button onClick="{{ p.remove }}" style="border:none;background:transparent;color:color-mix(in srgb, var(--color-text) 50%, transparent);cursor:pointer;font-size:15px;" style-hover="color:var(--color-accent-700);">×</button>
+                </div>
+              </sc-for>
+            </div>
+            <button onClick="{{ addPersonalTraitHandler }}" style="border:1px solid var(--color-divider);background:transparent;color:var(--color-text);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;" style-hover="background:color-mix(in srgb, var(--color-text) 7%, transparent);">+ Add trait</button>
+          </div>
+
+          <div>
+            <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:8px;">Anything else the AI should know</div>
+            <textarea value="{{ personalNotes }}" onChange="{{ setPersonalNotes }}" placeholder="Rules, things to avoid, past wins, personal style..." rows="3" style="width:100%;border:1px solid var(--color-divider);background:var(--color-surface);font-size:14px;color:var(--color-text);padding:10px 12px;" style-focus="border:1px solid var(--color-accent);"></textarea>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isGenerate }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:760px;">
+        <h1 style="font-family:var(--font-heading);font-weight:800;font-size:38px;letter-spacing:-0.015em;margin:0 0 8px;">Generate ideas</h1>
+        <p style="font-size:15px;color:color-mix(in srgb, var(--color-text) 65%, transparent);margin:0 0 28px;max-width:600px;">Pick a category and platform, add context if you've got it, then spin up ideas — quick combinatorial spins, or AI-written concepts using your framework and inspiration board.</p>
+
+        <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:10px;">Category</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px;">
+          <sc-for list="{{ genCategoryChips }}" as="chip" hint-placeholder-count="5">
+            <button onClick="{{ chip.select }}" style="{{ chip.style }}">{{ chip.name }}</button>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ hasScopedCategory }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:24px;">
+            <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:10px;">Formats to include</div>
+            <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:18px;">
+              <sc-for list="{{ genFormatCheckboxes }}" as="fc" hint-placeholder-count="3">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--color-text);cursor:pointer;">
+                  <input type="checkbox" checked="{{ fc.checked }}" onChange="{{ fc.toggle }}" style="accent-color:var(--color-accent);width:15px;height:15px;" />
+                  {{ fc.name }}
+                </label>
+              </sc-for>
+            </div>
+            <sc-if value="{{ hasStructureCheckboxes }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:10px;">Structures to include</div>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <sc-for list="{{ genStructureCheckboxes }}" as="stc" hint-placeholder-count="2">
+                  <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--color-text);cursor:pointer;">
+                    <input type="checkbox" checked="{{ stc.checked }}" onChange="{{ stc.toggle }}" style="accent-color:var(--color-accent);width:15px;height:15px;margin-top:2px;flex-shrink:0;" />
+                    <span>{{ stc.text }}</span>
+                  </label>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:10px;">Platform</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;">
+          <sc-for list="{{ genPlatformChips }}" as="chip" hint-placeholder-count="4">
+            <button onClick="{{ chip.select }}" style="{{ chip.style }}">{{ chip.name }}</button>
+          </sc-for>
+        </div>
+
+        <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:10px;">Context (optional)</div>
+        <textarea value="{{ genContext }}" onChange="{{ setGenContext }}" placeholder="What happened today, a comment someone made, a decision you're wrestling with..." rows="3" style="width:100%;padding:10px 12px;border:1px solid var(--color-divider);background:var(--color-surface);font-size:14px;color:var(--color-text);margin-bottom:22px;" style-focus="border:1px solid var(--color-accent);"></textarea>
+
+        <div style="display:flex;gap:40px;flex-wrap:wrap;margin-bottom:24px;">
+          <div>
+            <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:10px;">AI model</div>
+            <div style="display:flex;gap:8px;">
+              <button onClick="{{ setModelHaiku }}" style="{{ modelHaikuStyle }}">Haiku — fast</button>
+              <button onClick="{{ setModelSonnet }}" style="{{ modelSonnetStyle }}">Sonnet — stronger</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:10px;">Rounds to generate: {{ genBatchSize }} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:color-mix(in srgb, var(--color-text) 50%, transparent);">× formats × structures</span></div>
+            <input type="range" min="1" max="10" step="1" value="{{ genBatchSize }}" onChange="{{ setGenBatchSize }}" style="width:220px;accent-color:var(--color-accent);" />
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <button onClick="{{ doQuickSpin }}" style="padding:11px 20px;border:1px solid var(--color-divider);background:transparent;color:var(--color-text);font-size:14px;font-weight:800;cursor:pointer;" style-hover="background:color-mix(in srgb, var(--color-text) 7%, transparent);">Quick spin</button>
+          <button onClick="{{ doAiGenerate }}" style="padding:11px 22px;border:1px solid var(--color-accent);background:var(--color-accent);color:var(--color-bg);font-size:14px;font-weight:800;cursor:pointer;" style-hover="background:var(--color-accent-600);">{{ aiButtonLabel }}</button>
+        </div>
+
+        <sc-if value="{{ genError }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:20px;padding:12px 14px;border-left:2px solid var(--color-accent);background:var(--color-accent-100);color:var(--color-accent-800);font-size:13px;">{{ genError }}</div>
+        </sc-if>
+        <sc-if value="{{ justGenerated }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:20px;padding:12px 14px;border-left:2px solid var(--color-text);background:var(--color-surface);color:var(--color-text);font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <span>New idea(s) added to the board.</span>
+            <button onClick="{{ goToBoard }}" style="border:none;background:transparent;color:var(--color-accent-700);font-weight:800;cursor:pointer;font-size:13px;">View board →</button>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isIdeas }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <h1 style="font-family:var(--font-heading);font-weight:800;font-size:38px;letter-spacing:-0.015em;margin:0 0 8px;">Ideas board</h1>
+        <p style="font-size:15px;color:color-mix(in srgb, var(--color-text) 65%, transparent);margin:0 0 26px;">{{ ideasCount }} ideas total. Click a title to open the full card and edit anything.</p>
+        <div style="display:flex;gap:24px;overflow-x:auto;padding-bottom:12px;">
+          <sc-for list="{{ columns }}" as="col" hint-placeholder-count="4">
+            <div style="width:300px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid var(--color-divider);padding-bottom:8px;">
+                <span style="font-size:12px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:var(--color-text);">{{ col.label }}</span>
+                <span style="font-size:11px;color:var(--color-neutral-800);background:var(--color-neutral-100);padding:2px 8px;">{{ col.count }}</span>
+              </div>
+              <sc-if value="{{ col.empty }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:13px;color:color-mix(in srgb, var(--color-text) 50%, transparent);padding:18px;text-align:center;border:1px solid var(--color-divider);">No ideas here yet</div>
+              </sc-if>
+              <sc-for list="{{ col.items }}" as="item" hint-placeholder-count="2">
+                <div style="background:var(--color-surface);padding:14px;display:flex;flex-direction:column;gap:8px;">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="font-size:10px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-accent-700);">{{ item.categoryName }}</span>
+                    <span style="font-size:10px;background:var(--color-neutral-100);color:var(--color-neutral-800);padding:2px 6px;">{{ item.platform }}</span>
+                    <div style="flex:1;"></div>
+                    <sc-if value="{{ item.isDraft }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size:10px;background:var(--color-accent-100);color:var(--color-accent-800);padding:2px 6px;">Draft</span>
+                    </sc-if>
+                    <button onClick="{{ item.doDelete }}" style="border:none;background:transparent;color:color-mix(in srgb, var(--color-text) 50%, transparent);cursor:pointer;font-size:15px;line-height:1;padding:0 2px;" style-hover="color:var(--color-accent-700);">×</button>
+                  </div>
+
+                  <button onClick="{{ item.toggleExpand }}" style="text-align:left;background:none;border:none;padding:0;cursor:pointer;">
+                    <div style="font-family:var(--font-heading);font-size:16px;font-weight:800;letter-spacing:-0.01em;color:var(--color-text);">{{ item.titleDisplay }}</div>
+                  </button>
+
+                  <sc-if value="{{ item.collapsed }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ item.toggleExpand }}" style="text-align:left;background:none;border:none;padding:0;cursor:pointer;font-size:11px;font-weight:600;color:color-mix(in srgb, var(--color-text) 55%, transparent);">+ Show details</button>
+                  </sc-if>
+
+                  <sc-if value="{{ item.expanded }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);">Title</div>
+                    <input value="{{ item.title }}" onChange="{{ item.setTitle }}" placeholder="Idea title" style="border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-family:var(--font-heading);font-size:14px;font-weight:800;color:var(--color-text);padding:6px 8px;width:100%;" style-focus="border:1px solid var(--color-accent);" />
+                    <div style="font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);">Hook / opening line</div>
+                    <textarea value="{{ item.hook }}" onChange="{{ item.setHook }}" placeholder="Hook / opening line" rows="2" style="border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-size:13px;color:var(--color-text);padding:6px 8px;width:100%;" style-focus="border:1px solid var(--color-accent);"></textarea>
+                    <div style="display:flex;gap:6px;">
+                      <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+                        <div style="font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);">Platform</div>
+                        <select value="{{ item.platform }}" onChange="{{ item.setPlatform }}" style="font-size:12px;padding:5px 6px;border:1px solid var(--color-divider);background:var(--color-bg);color:var(--color-text);">
+                          <option value="Any">Any</option>
+                          <option value="YouTube">YouTube</option>
+                          <option value="Instagram">Instagram</option>
+                          <option value="TikTok">TikTok</option>
+                        </select>
+                      </div>
+                      <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+                        <div style="font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);">Status</div>
+                        <select value="{{ item.status }}" onChange="{{ item.setStatus }}" style="font-size:12px;padding:5px 6px;border:1px solid var(--color-divider);background:var(--color-bg);color:var(--color-text);">
+                          <option value="idea">Idea</option>
+                          <option value="scripted">Scripted</option>
+                          <option value="filmed">Filmed</option>
+                          <option value="posted">Posted</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style="font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);">Category</div>
+                    <select value="{{ item.categoryId }}" onChange="{{ item.setCategory }}" style="font-size:12px;padding:5px 6px;border:1px solid var(--color-divider);background:var(--color-bg);color:var(--color-text);">
+                      <option value="">Uncategorized</option>
+                      <sc-for list="{{ item.categoryOptions }}" as="catOpt" hint-placeholder-count="4">
+                        <option value="{{ catOpt.id }}">{{ catOpt.name }}</option>
+                      </sc-for>
+                    </select>
+                    <div style="font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);">Notes</div>
+                    <textarea value="{{ item.notes }}" onChange="{{ item.setNotes }}" placeholder="Notes" rows="2" style="border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-size:12px;color:var(--color-text);padding:6px 8px;width:100%;" style-focus="border:1px solid var(--color-accent);"></textarea>
+                    <div style="font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);">Reference link</div>
+                    <input value="{{ item.link }}" onChange="{{ item.setLink }}" placeholder="Reference link (optional)" style="border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-size:12px;color:var(--color-text);padding:6px 8px;width:100%;" style-focus="border:1px solid var(--color-accent);" />
+
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);padding-top:8px;margin-top:2px;">
+                      <div style="font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);">Script</div>
+                      <button onClick="{{ item.doScriptButtonClick }}" style="border:1px solid var(--color-accent);background:transparent;color:var(--color-accent-700);padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;" style-hover="background:var(--color-accent-100);">{{ item.scriptButtonLabel }}</button>
+                    </div>
+                    <sc-if value="{{ item.showRegenPanel }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-direction:column;gap:6px;background:var(--color-bg);border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);padding:8px;">
+                        <input value="{{ item.regenNote }}" onChange="{{ item.setRegenNote }}" placeholder="What should change? e.g. punchier hook, shorter, add a CTA" style="border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-surface);font-size:12px;color:var(--color-text);padding:6px 8px;width:100%;" style-focus="border:1px solid var(--color-accent);" />
+                        <div style="display:flex;gap:6px;">
+                          <button onClick="{{ item.confirmRegen }}" style="flex:1;border:1px solid var(--color-accent);background:var(--color-accent);color:var(--color-bg);padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;" style-hover="background:var(--color-accent-600);">{{ item.scriptButtonLabel }}</button>
+                          <button onClick="{{ item.cancelRegen }}" style="border:1px solid var(--color-divider);background:transparent;color:var(--color-text);padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;" style-hover="background:color-mix(in srgb, var(--color-text) 7%, transparent);">Cancel</button>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <textarea value="{{ item.script }}" onChange="{{ item.setScript }}" placeholder="Generate a script from the notes above, or write your own" rows="6" style="border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-size:12px;color:var(--color-text);padding:6px 8px;width:100%;" style-focus="border:1px solid var(--color-accent);"></textarea>
+
+                    <div style="font-size:11px;color:color-mix(in srgb, var(--color-text) 50%, transparent);border-top:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);padding-top:6px;">{{ item.createdDisplay }}</div>
+                    <button onClick="{{ item.toggleExpand }}" style="text-align:left;background:none;border:none;padding:0;cursor:pointer;font-size:11px;font-weight:600;color:color-mix(in srgb, var(--color-text) 55%, transparent);">− Hide details</button>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isFrameworks }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:820px;">
+        <h1 style="font-family:var(--font-heading);font-weight:800;font-size:38px;letter-spacing:-0.015em;margin:0 0 8px;">Your content framework</h1>
+        <p style="font-size:15px;color:color-mix(in srgb, var(--color-text) 65%, transparent);margin:0 0 26px;">Content types, their formats, and the structure that makes each one work. Edit any of it — the generator reads straight from here.</p>
+
+        <sc-for list="{{ categoriesEnriched }}" as="cat" hint-placeholder-count="4">
+          <div style="background:var(--color-surface);padding:20px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;border-bottom:1px solid color-mix(in srgb, var(--color-text) 30%, transparent);padding-bottom:12px;">
+              <sc-if value="{{ cat.collapsed }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ cat.toggleExpand }}" style="border:none;background:transparent;color:color-mix(in srgb, var(--color-text) 60%, transparent);cursor:pointer;font-size:13px;padding:0 2px;flex-shrink:0;">▸</button>
+              </sc-if>
+              <sc-if value="{{ cat.expanded }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ cat.toggleExpand }}" style="border:none;background:transparent;color:color-mix(in srgb, var(--color-text) 60%, transparent);cursor:pointer;font-size:13px;padding:0 2px;flex-shrink:0;">▾</button>
+              </sc-if>
+              <input value="{{ cat.name }}" onChange="{{ cat.setName }}" style="flex:1;border:none;border-bottom:1px solid transparent;background:transparent;font-family:var(--font-heading);font-size:19px;font-weight:800;letter-spacing:-0.01em;color:var(--color-text);padding:2px 0;" style-focus="border-bottom:1px solid var(--color-accent);" />
+              <select value="{{ cat.stage }}" onChange="{{ cat.setStage }}" style="font-size:12px;padding:5px 8px;border:1px solid var(--color-divider);background:var(--color-bg);color:var(--color-text);">
+                <option value="TOF">TOF</option>
+                <option value="MOF">MOF</option>
+                <option value="BOF">BOF</option>
+              </select>
+              <select key="{{ cat.id }}-{{ cat.owner }}" value="{{ cat.owner }}" onChange="{{ cat.setOwner }}" style="font-size:12px;padding:5px 8px;border:1px solid var(--color-divider);background:var(--color-bg);color:var(--color-text);">
+                <option value="brand">Brand</option>
+                <option value="personal">Personal</option>
+              </select>
+              <button onClick="{{ cat.removeCat }}" style="border:none;background:transparent;color:color-mix(in srgb, var(--color-text) 50%, transparent);cursor:pointer;font-size:17px;" style-hover="color:var(--color-accent-700);">×</button>
+            </div>
+
+            <sc-if value="{{ cat.collapsed }}" hint-placeholder-val="{{ true }}">
+              <div style="font-size:13px;color:color-mix(in srgb, var(--color-text) 60%, transparent);">{{ cat.formatCount }} formats · {{ cat.structureCount }} structures · {{ cat.ownerLabel }}</div>
+            </sc-if>
+
+            <sc-if value="{{ cat.expanded }}" hint-placeholder-val="{{ false }}">
+              <textarea value="{{ cat.desc }}" onChange="{{ cat.setDesc }}" placeholder="What is this content type for?" rows="2" style="width:100%;border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-size:13px;color:var(--color-text);padding:8px 10px;margin-bottom:14px;" style-focus="border:1px solid var(--color-accent);"></textarea>
+
+              <div style="font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:8px;">Structures <span style="font-weight:400;text-transform:none;letter-spacing:0;color:color-mix(in srgb, var(--color-text) 50%, transparent);">— every idea generated here produces one variant per structure below; formats can layer their own note on top</span></div>
+              <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+                <sc-for list="{{ cat.structuresEnriched }}" as="st" hint-placeholder-count="2">
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <input value="{{ st.text }}" onChange="{{ st.setText }}" placeholder="e.g. Hook with the take → back it with a reason or story → land the point" style="flex:1;border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-size:13px;color:var(--color-text);padding:7px 10px;" style-focus="border:1px solid var(--color-accent);" />
+                    <button onClick="{{ st.remove }}" style="border:none;background:transparent;color:color-mix(in srgb, var(--color-text) 50%, transparent);cursor:pointer;font-size:15px;" style-hover="color:var(--color-accent-700);">×</button>
+                  </div>
+                </sc-for>
+              </div>
+              <button onClick="{{ cat.addStructureHandler }}" style="border:1px solid var(--color-divider);background:transparent;color:var(--color-text);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;margin-bottom:16px;" style-hover="background:color-mix(in srgb, var(--color-text) 7%, transparent);">+ Add structure</button>
+
+              <div style="font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:10px;">Formats</div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+                <sc-for list="{{ cat.angles }}" as="angle" hint-placeholder-count="3">
+                  <div style="border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);padding:10px;display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;gap:6px;align-items:center;">
+                      <input value="{{ angle.name }}" onChange="{{ angle.setName }}" placeholder="Format name" style="flex:1;border:none;background:transparent;font-size:13px;font-weight:700;color:var(--color-text);padding:2px 0;" style-focus="outline:none;" />
+                      <button onClick="{{ angle.remove }}" style="border:none;background:transparent;color:color-mix(in srgb, var(--color-text) 50%, transparent);cursor:pointer;font-size:15px;" style-hover="color:var(--color-accent-700);">×</button>
+                    </div>
+                    <textarea value="{{ angle.structure }}" onChange="{{ angle.setStructure }}" placeholder="Extra notes on top of the default structure (optional)" rows="2" style="border:1px solid color-mix(in srgb, var(--color-text) 20%, transparent);background:var(--color-surface);font-size:12px;color:var(--color-text);padding:6px 8px;width:100%;" style-focus="border:1px solid var(--color-accent);"></textarea>
+                  </div>
+                </sc-for>
+              </div>
+              <button onClick="{{ cat.addAngleHandler }}" style="border:1px solid var(--color-divider);background:transparent;color:var(--color-text);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;text-align:left;" style-hover="background:color-mix(in srgb, var(--color-text) 7%, transparent);">+ Add format</button>
+            </sc-if>
+          </div>
+        </sc-for>
+        <button onClick="{{ addCategoryHandler }}" style="border:1px solid var(--color-divider);background:transparent;color:var(--color-text);padding:12px;font-size:13px;font-weight:800;cursor:pointer;width:100%;margin-bottom:32px;text-align:left;" style-hover="background:color-mix(in srgb, var(--color-text) 7%, transparent);">+ Add content type</button>
+
+        <div style="border-top:2px solid var(--color-divider);padding-top:24px;">
+          <h2 style="font-family:var(--font-heading);font-weight:800;font-size:22px;margin:0 0 4px;">Hook formulas</h2>
+          <p style="font-size:13px;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin:0 0 16px;">Fed into every generated idea.</p>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;max-width:480px;">
+            <sc-for list="{{ hooksEnriched }}" as="h" hint-placeholder-count="4">
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input value="{{ h.text }}" onChange="{{ h.setText }}" style="flex:1;border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-surface);font-size:13px;color:var(--color-text);padding:7px 10px;" style-focus="border:1px solid var(--color-accent);" />
+                <button onClick="{{ h.remove }}" style="border:none;background:transparent;color:color-mix(in srgb, var(--color-text) 50%, transparent);cursor:pointer;font-size:15px;" style-hover="color:var(--color-accent-700);">×</button>
+              </div>
+            </sc-for>
+          </div>
+          <button onClick="{{ addHookHandler }}" style="border:1px solid var(--color-divider);background:transparent;color:var(--color-text);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;max-width:480px;width:100%;text-align:left;" style-hover="background:color-mix(in srgb, var(--color-text) 7%, transparent);">+ Add hook formula</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isInspiration }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:900px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:26px;">
+          <div>
+            <h1 style="font-family:var(--font-heading);font-weight:800;font-size:38px;letter-spacing:-0.015em;margin:0 0 8px;">Inspiration</h1>
+            <p style="font-size:15px;color:color-mix(in srgb, var(--color-text) 65%, transparent);margin:0;max-width:560px;">Pages, creators, or competitors worth tracking. Tag them by category so the generator can borrow their angle.</p>
+          </div>
+          <button onClick="{{ addInspirationHandler }}" style="flex-shrink:0;padding:11px 18px;border:1px solid var(--color-accent);background:var(--color-accent);color:var(--color-bg);font-size:13px;font-weight:800;cursor:pointer;" style-hover="background:var(--color-accent-600);">+ Add</button>
+        </div>
+
+        <sc-if value="{{ inspirationEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:14px;color:color-mix(in srgb, var(--color-text) 50%, transparent);padding:32px;text-align:center;border:1px solid var(--color-divider);">No inspiration saved yet — add a page or creator you admire.</div>
+        </sc-if>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <sc-for list="{{ inspirationsEnriched }}" as="insp" hint-placeholder-count="3">
+            <div style="background:var(--color-surface);padding:18px;display:flex;flex-direction:column;gap:8px;">
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input value="{{ insp.name }}" onChange="{{ insp.setName }}" placeholder="Name / page" style="flex:1;border:none;border-bottom:1px solid transparent;background:transparent;font-family:var(--font-heading);font-size:16px;font-weight:800;color:var(--color-text);padding:2px 0;" style-focus="border-bottom:1px solid var(--color-accent);" />
+                <button onClick="{{ insp.remove }}" style="border:none;background:transparent;color:color-mix(in srgb, var(--color-text) 50%, transparent);cursor:pointer;font-size:17px;" style-hover="color:var(--color-accent-700);">×</button>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <input value="{{ insp.handle }}" onChange="{{ insp.setHandle }}" placeholder="@handle" style="flex:1;border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-size:12px;color:var(--color-text);padding:6px 8px;" style-focus="border:1px solid var(--color-accent);" />
+                <select value="{{ insp.platform }}" onChange="{{ insp.setPlatform }}" style="border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-size:12px;color:var(--color-text);padding:6px 8px;">
+                  <option value="Instagram">Instagram</option>
+                  <option value="TikTok">TikTok</option>
+                  <option value="YouTube">YouTube</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <input value="{{ insp.link }}" onChange="{{ insp.setLink }}" placeholder="https://..." style="border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-size:12px;color:var(--color-text);padding:6px 8px;" style-focus="border:1px solid var(--color-accent);" />
+              <sc-if value="{{ insp.hasLink }}" hint-placeholder-val="{{ true }}">
+                <a href="{{ insp.link }}" target="_blank" rel="noopener" style="font-size:12px;">Open ↗</a>
+              </sc-if>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
+                <sc-for list="{{ insp.catChips }}" as="chip" hint-placeholder-count="4">
+                  <button onClick="{{ chip.toggle }}" style="{{ chip.style }}">{{ chip.name }}</button>
+                </sc-for>
+              </div>
+              <textarea value="{{ insp.notes }}" onChange="{{ insp.setNotes }}" placeholder="What do you like about their content?" rows="2" style="border:1px solid color-mix(in srgb, var(--color-text) 25%, transparent);background:var(--color-bg);font-size:12px;color:var(--color-text);padding:6px 8px;width:100%;" style-focus="border:1px solid var(--color-accent);"></textarea>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+  </main>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;defaultPlatformFilter&quot;: {&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Any&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;Any&quot;,&quot;YouTube&quot;,&quot;Instagram&quot;,&quot;TikTok&quot;],&quot;section&quot;:&quot;Generator defaults&quot;}
+}">
+class Component extends DCLogic {
+  state = (() => this.defaultSeed())();
+
+  genId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+  defaultSeed(){
+    const g = () => this.genId();
+    return {
+      activeTab: 'generate',
+      brandName: 'arysk',
+      brandOneLiner: '',
+      brandAudience: '',
+      brandVoice: '',
+      brandPillars: [],
+      brandNotes: '',
+      personalName: '',
+      personalOneLiner: '',
+      personalVoice: '',
+      personalTraits: [],
+      personalNotes: '',
+      aiModel: 'haiku',
+      genBatchSize: 5,
+      genCategory: 'all',
+      genPlatform: (this.props && this.props.defaultPlatformFilter) || 'Any',
+      genContext: '',
+      generating: false,
+      genError: '',
+      justGenerated: false,
+      expandedIds: {},
+      scriptGeneratingIds: {},
+      scriptRegenOpenIds: {},
+      scriptRegenNotes: {},
+      expandedCategoryIds: {},
+      genFormatChecks: {},
+      genStructureChecks: {},
+      categories: [
+        { id: 'yap', name: 'Yap', stage: 'TOF', owner: 'personal', desc: 'Raw, direct-to-camera. Builds reach and trust \u2014 no hard CTA, just posted.',
+          structures: [{ id: g(), text: 'Hook with the take \u2192 back it with one quick reason or story \u2192 land the point (or leave it open).' }],
+          angles: [
+            { id: g(), name: 'Strong take', structure: '' },
+            { id: g(), name: 'Strong take \u2192 education', structure: 'State the take \u2192 pivot into teaching the underlying lesson' },
+            { id: g(), name: 'Small epiphany', structure: '' },
+            { id: g(), name: 'Humour yap', structure: '' },
+            { id: g(), name: 'Storytime', structure: '' }
+          ]},
+        { id: 'storytelling', name: 'Storytelling', stage: 'MOF', owner: 'personal', desc: 'Longer-form personal storytelling. Alternate between two formats.',
+          structures: [],
+          angles: [
+            { id: g(), name: 'Narrative', structure: 'Set the scene \u2192 the risk or decision \u2192 what happened \u2192 what you learned' },
+            { id: g(), name: 'Decision BTS', structure: "Name the decision \u2192 what led to it \u2192 the tradeoffs weighed \u2192 the outcome so far" }
+          ]},
+        { id: 'vlog', name: 'Vlog', stage: 'MOF', owner: 'personal', desc: 'Day-in-the-life documentation. Reveal the setup early, withhold the outcome.',
+          structures: [],
+          angles: [
+            { id: g(), name: 'Audience Hacking', structure: 'Anchor to a known person/format \u2192 place your bet \u2192 live it out \u2192 compare \u2192 give your take' },
+            { id: g(), name: "Hero's Journey", structure: 'Problem \u2192 backstory \u2192 attempt \u2192 setback \u2192 epiphany \u2192 resolution' },
+            { id: g(), name: 'How-to / Educational', structure: 'Name the process \u2192 the stakes \u2192 the steps \u2192 the snag \u2192 the takeaway' },
+            { id: g(), name: 'Founder Log', structure: "Episode theme \u2192 where things stand \u2192 this stretch's build \u2192 life thread \u2192 what's next" }
+          ]},
+        { id: 'brand', name: 'Brand / Drop', stage: 'BOF', owner: 'brand', desc: 'Product-focused. The actual conversion destination.',
+          structures: [],
+          angles: [
+            { id: g(), name: 'Concept/product video', structure: 'Viral-ish, interesting angle, not polished' },
+            { id: g(), name: 'Why the brand exists', structure: 'Short doc format' },
+            { id: g(), name: 'Detail/flatlay reveal', structure: '' },
+            { id: g(), name: 'Launch post', structure: '' },
+            { id: g(), name: 'Post-sellout proof', structure: 'Sold out in X hours \u2192 show the waitlist' }
+          ]}
+      ],
+      hooks: [
+        { id: g(), text: 'Contrarian statement' },
+        { id: g(), text: 'Direct question' },
+        { id: g(), text: 'Story cold-open' },
+        { id: g(), text: 'Myth-bust' }
+      ],
+      ideas: [],
+      inspirations: [
+        { id: g(), name: 'Austin Georgas', handle: '@austingeorgas', platform: 'Instagram', link: 'https://www.instagram.com/austingeorgas/', tags: ['yap'], notes: 'Yap content \u2014 raw, direct-to-camera reference.' },
+        { id: g(), name: 'Ross Mackay', handle: '@RossMackay1', platform: 'YouTube', link: 'https://www.youtube.com/@RossMackay1', tags: ['vlog'], notes: 'Founder vlog reference.' },
+        { id: g(), name: 'George Heaton', handle: '@George.Heaton', platform: 'YouTube', link: 'https://www.youtube.com/@George.Heaton/videos', tags: ['vlog'], notes: '' }
+      ]
+    };
+  }
+
+  componentDidMount(){
+    try {
+      const raw = localStorage.getItem('cia_v1');
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved && Array.isArray(saved.categories)) this.setState(saved);
+      }
+    } catch(e){}
+  }
+
+  persist(){
+    try {
+      const { brandName, brandOneLiner, brandAudience, brandVoice, brandPillars, brandNotes, personalName, personalOneLiner, personalVoice, personalTraits, personalNotes, aiModel, genBatchSize, categories, hooks, ideas, inspirations } = this.state;
+      localStorage.setItem('cia_v1', JSON.stringify({ brandName, brandOneLiner, brandAudience, brandVoice, brandPillars, brandNotes, personalName, personalOneLiner, personalVoice, personalTraits, personalNotes, aiModel, genBatchSize, categories, hooks, ideas, inspirations }));
+    } catch(e){}
+  }
+
+  buildChipStyle(active){
+    if (active) return 'display:inline-flex;align-items:center;padding:7px 14px;border:1px solid var(--color-accent);background:var(--color-accent);color:var(--color-bg);font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;';
+    return 'display:inline-flex;align-items:center;padding:7px 14px;border:1px solid var(--color-divider);background:transparent;color:var(--color-text);font-size:13px;font-weight:400;cursor:pointer;white-space:nowrap;';
+  }
+
+  setField(name){ return (e) => { const val = e.target.value; this.setState({ [name]: val }, () => this.persist()); }; }
+
+  setBrandName(e){ this.setState({ brandName: e.target.value }, () => this.persist()); }
+
+  addBrandPillar(){ this.setState(s => ({ brandPillars: [...(s.brandPillars||[]), { id: this.genId(), text: '' }] }), () => this.persist()); }
+  updateBrandPillar(id, value){ this.setState(s => ({ brandPillars: (s.brandPillars||[]).map(p => p.id === id ? { ...p, text: value } : p) }), () => this.persist()); }
+  removeBrandPillar(id){ this.setState(s => ({ brandPillars: (s.brandPillars||[]).filter(p => p.id !== id) }), () => this.persist()); }
+
+  addPersonalTrait(){ this.setState(s => ({ personalTraits: [...(s.personalTraits||[]), { id: this.genId(), text: '' }] }), () => this.persist()); }
+  updatePersonalTrait(id, value){ this.setState(s => ({ personalTraits: (s.personalTraits||[]).map(p => p.id === id ? { ...p, text: value } : p) }), () => this.persist()); }
+  removePersonalTrait(id){ this.setState(s => ({ personalTraits: (s.personalTraits||[]).filter(p => p.id !== id) }), () => this.persist()); }
+
+  isFormatChecked(id){ return this.state.genFormatChecks[id] !== false; }
+  isStructureChecked(id){ return this.state.genStructureChecks[id] !== false; }
+  toggleFormatCheck(id){ this.setState(s => ({ genFormatChecks: { ...s.genFormatChecks, [id]: !(s.genFormatChecks[id] !== false) } })); }
+  toggleStructureCheck(id){ this.setState(s => ({ genStructureChecks: { ...s.genStructureChecks, [id]: !(s.genStructureChecks[id] !== false) } })); }
+  getGenerationPools(cat){
+    const s = this.state;
+    const scoped = !!(s.genCategory && s.genCategory !== 'all');
+    const angles = scoped ? (cat.angles||[]).filter(a => this.isFormatChecked(a.id)) : (cat.angles||[]);
+    const structures = scoped ? (cat.structures||[]).filter(st => this.isStructureChecked(st.id)) : (cat.structures||[]);
+    return { angles, structures };
+  }
+
+  expandIdeas(cat, baseTitle, baseHook, platform, baseNotes){
+    const { angles, structures } = this.getGenerationPools(cat);
+    const out = [];
+    if (!angles.length) return out;
+    const multiFormat = angles.length > 1;
+    if (structures.length){
+      const multiStruct = structures.length > 1;
+      angles.forEach(angle => {
+        structures.forEach((st, idx) => {
+          const structureText = [st.text, angle.structure].filter(Boolean).join(' + ');
+          const notes = [baseNotes, structureText ? ('Structure: ' + structureText) : ''].filter(Boolean).join(' \u2014 ');
+          let title = (baseTitle && multiFormat) ? (baseTitle + ' \u2014 ' + angle.name) : (baseTitle || angle.name);
+          if (multiStruct) title += ' \u2014 variant ' + (idx+1);
+          out.push({ title, hook: baseHook, platform, categoryId: cat.id, notes });
+        });
+      });
+    } else {
+      angles.forEach(angle => {
+        const notes = [baseNotes, angle.structure ? ('Structure: ' + angle.structure) : ''].filter(Boolean).join(' \u2014 ');
+        const title = (baseTitle && multiFormat) ? (baseTitle + ' \u2014 ' + angle.name) : (baseTitle || angle.name);
+        out.push({ title, hook: baseHook, platform, categoryId: cat.id, notes });
+      });
+    }
+    return out;
+  }
+
+  setAiModel(model){ this.setState({ aiModel: model }, () => this.persist()); }
+  setGenBatchSize(e){ const v = parseInt(e.target.value, 10); this.setState({ genBatchSize: v }, () => this.persist()); }
+
+  updateCategoryField(catId, field, value){ this.setState(s => ({ categories: s.categories.map(c => c.id === catId ? { ...c, [field]: value } : c) }), () => this.persist()); }
+  addCategory(){ this.setState(s => ({ categories: [...s.categories, { id: this.genId(), name: 'New content type', stage: 'TOF', owner: 'brand', desc: '', structures: [], angles: [] }] }), () => this.persist()); }
+  addStructure(catId){ this.setState(s => ({ categories: s.categories.map(c => c.id === catId ? { ...c, structures: [...(c.structures||[]), { id: this.genId(), text: '' }] } : c) }), () => this.persist()); }
+  updateStructure(catId, structId, value){ this.setState(s => ({ categories: s.categories.map(c => c.id === catId ? { ...c, structures: (c.structures||[]).map(st => st.id === structId ? { ...st, text: value } : st) } : c) }), () => this.persist()); }
+  removeStructure(catId, structId){ this.setState(s => ({ categories: s.categories.map(c => c.id === catId ? { ...c, structures: (c.structures||[]).filter(st => st.id !== structId) } : c) }), () => this.persist()); }
+  removeCategory(id){ this.setState(s => ({ categories: s.categories.filter(c => c.id !== id) }), () => this.persist()); }
+  addAngle(catId){ this.setState(s => ({ categories: s.categories.map(c => c.id === catId ? { ...c, angles: [...c.angles, { id: this.genId(), name: 'New format', structure: '' }] } : c) }), () => this.persist()); }
+  updateAngleField(catId, angleId, field, value){ this.setState(s => ({ categories: s.categories.map(c => c.id === catId ? { ...c, angles: c.angles.map(a => a.id === angleId ? { ...a, [field]: value } : a) } : c) }), () => this.persist()); }
+  removeAngle(catId, angleId){ this.setState(s => ({ categories: s.categories.map(c => c.id === catId ? { ...c, angles: c.angles.filter(a => a.id !== angleId) } : c) }), () => this.persist()); }
+
+  addHook(){ this.setState(s => ({ hooks: [...s.hooks, { id: this.genId(), text: 'New hook formula' }] }), () => this.persist()); }
+  updateHook(id, value){ this.setState(s => ({ hooks: s.hooks.map(h => h.id === id ? { ...h, text: value } : h) }), () => this.persist()); }
+  removeHook(id){ this.setState(s => ({ hooks: s.hooks.filter(h => h.id !== id) }), () => this.persist()); }
+
+  addInspiration(){ this.setState(s => ({ inspirations: [{ id: this.genId(), name: '', handle: '', platform: 'Instagram', link: '', tags: [], notes: '' }, ...(s.inspirations||[])] }), () => this.persist()); }
+  updateInspiration(id, field, value){ this.setState(s => ({ inspirations: s.inspirations.map(i => i.id === id ? { ...i, [field]: value } : i) }), () => this.persist()); }
+  toggleInspirationTag(id, catId){ this.setState(s => ({ inspirations: s.inspirations.map(i => { if (i.id !== id) return i; const tags = i.tags || []; const has = tags.includes(catId); return { ...i, tags: has ? tags.filter(t => t !== catId) : [...tags, catId] }; }) }), () => this.persist()); }
+  removeInspiration(id){ this.setState(s => ({ inspirations: s.inspirations.filter(i => i.id !== id) }), () => this.persist()); }
+
+  addIdea(partial){
+    const idea = { id: this.genId(), title: '', hook: '', platform: 'Any', categoryId: '', status: 'idea', notes: '', link: '', script: '', isDraft: true, createdAt: Date.now(), ...partial };
+    this.setState(s => ({ ideas: [idea, ...(s.ideas||[])] }), () => this.persist());
+  }
+
+  openRegenPanel(id){ this.setState(s => ({ scriptRegenOpenIds: { ...s.scriptRegenOpenIds, [id]: true } })); }
+  closeRegenPanel(id){ this.setState(s => ({ scriptRegenOpenIds: { ...s.scriptRegenOpenIds, [id]: false } })); }
+  setRegenNote(id, value){ this.setState(s => ({ scriptRegenNotes: { ...s.scriptRegenNotes, [id]: value } })); }
+
+  async generateScript(id, instruction){
+    const s0 = this.state;
+    const idea = (s0.ideas||[]).find(i => i.id === id);
+    if (!idea) return;
+    this.setState(s => ({ scriptGeneratingIds: { ...s.scriptGeneratingIds, [id]: true } }));
+    try {
+      const cat = (s0.categories||[]).find(c => c.id === idea.categoryId);
+      let prompt = 'Write a short-form video script for the brand "' + s0.brandName + '"' + (s0.brandOneLiner ? (' \u2014 ' + s0.brandOneLiner) : '') + '.\n\n';
+      prompt += 'Idea title: ' + (idea.title || 'Untitled') + '\n';
+      if (cat) prompt += 'Content type: ' + cat.name + ' (' + cat.stage + ')\n';
+      if (idea.platform && idea.platform !== 'Any') prompt += 'Platform: ' + idea.platform + '\n';
+      if (idea.hook) prompt += 'Hook / opening line: ' + idea.hook + '\n';
+      if (idea.notes) prompt += 'Notes / structure to follow: ' + idea.notes + '\n';
+      const owner = cat ? cat.owner : 'brand';
+      if (owner === 'personal') {
+        prompt += 'Write this in the personal voice of ' + (s0.personalName || 'the creator') + (s0.personalOneLiner ? (' \u2014 ' + s0.personalOneLiner) : '') + '.\n';
+        if (s0.personalVoice) prompt += 'Voice & tone: ' + s0.personalVoice + '\n';
+      } else {
+        prompt += 'Write this in the "' + s0.brandName + '" brand voice.\n';
+        if (s0.brandVoice) prompt += 'Voice & tone: ' + s0.brandVoice + '\n';
+      }
+      if (idea.script) {
+        prompt += '\nExisting script:\n' + idea.script + '\n';
+        prompt += instruction ? ('\nRevise it with this specific change: ' + instruction + '\n') : '\nWrite a fresh alternate take on it.\n';
+      }
+      prompt += '\nWrite the actual script \u2014 what to say on camera, beat by beat, following the structure in the notes if one is given. Keep it tight for a short-form video. Respond with the script only, no commentary, no markdown headers.';
+      const model = (s0.aiModel === 'sonnet') ? 'claude-sonnet-4-5' : 'claude-haiku-4-5';
+      const text = await window.claude.complete({ messages: [{ role: 'user', content: prompt }], model, max_tokens: 1200 });
+      this.setState(s => ({
+        ideas: s.ideas.map(i => i.id === id ? { ...i, script: (text||'').trim(), status: 'scripted' } : i),
+        scriptGeneratingIds: { ...s.scriptGeneratingIds, [id]: false },
+        scriptRegenOpenIds: { ...s.scriptRegenOpenIds, [id]: false },
+        scriptRegenNotes: { ...s.scriptRegenNotes, [id]: '' }
+      }), () => this.persist());
+    } catch(err){
+      this.setState(s => ({ scriptGeneratingIds: { ...s.scriptGeneratingIds, [id]: false }, genError: 'Script generation failed \u2014 try again.' }));
+    }
+  }
+  updateIdea(id, field, value){ this.setState(s => ({ ideas: s.ideas.map(i => i.id === id ? { ...i, [field]: value, isDraft: false } : i) }), () => this.persist()); }
+  setIdeaStatus(id, status){ this.setState(s => ({ ideas: s.ideas.map(i => i.id === id ? { ...i, status } : i) }), () => this.persist()); }
+  deleteIdea(id){ this.setState(s => ({ ideas: s.ideas.filter(i => i.id !== id) }), () => this.persist()); }
+  toggleIdeaExpand(id){ this.setState(s => ({ expandedIds: { ...(s.expandedIds||{}), [id]: !(s.expandedIds && s.expandedIds[id]) } })); }
+  toggleCategoryExpand(id){ this.setState(s => ({ expandedCategoryIds: { ...(s.expandedCategoryIds||{}), [id]: !(s.expandedCategoryIds && s.expandedCategoryIds[id]) } })); }
+
+  quickSpin(){
+    const s = this.state;
+    const cats = s.categories;
+    if (!cats || cats.length === 0) return;
+    const rounds = s.genBatchSize || 1;
+    for (let i = 0; i < rounds; i++){
+      const cat = (s.genCategory && s.genCategory !== 'all') ? cats.find(c => c.id === s.genCategory) : cats[Math.floor(Math.random()*cats.length)];
+      if (!cat || !cat.angles || cat.angles.length === 0){ this.setState({ genError: 'Add at least one format to "' + (cat?cat.name:'this category') + '" first, in Frameworks.' }); return; }
+      const hook = (s.hooks && s.hooks.length) ? s.hooks[Math.floor(Math.random()*s.hooks.length)] : null;
+      const platform = (s.genPlatform && s.genPlatform !== 'Any') ? s.genPlatform : ['YouTube','Instagram','TikTok'][Math.floor(Math.random()*3)];
+      const hookLine = hook ? ('Open with a "' + hook.text + '"...') : '';
+      const ideas = this.expandIdeas(cat, '', hookLine, platform, '');
+      if (!ideas.length){ this.setState({ genError: 'Select at least one format to include for "' + cat.name + '".' }); return; }
+      ideas.forEach(idea => this.addIdea(idea));
+    }
+    this.setState({ genError: '', justGenerated: true });
+  }
+
+  buildVoiceAndBrandBlocks(){
+    const s = this.state;
+    const pillars = (s.brandPillars||[]).map(p => p.text).filter(Boolean);
+    const traits = (s.personalTraits||[]).map(p => p.text).filter(Boolean);
+    let brandBlock = 'Brand: ' + s.brandName + (s.brandOneLiner ? (' \u2014 ' + s.brandOneLiner) : '') + '\n';
+    if (s.brandAudience) brandBlock += 'Audience: ' + s.brandAudience + '\n';
+    if (s.brandVoice) brandBlock += 'Brand voice & tone: ' + s.brandVoice + '\n';
+    if (pillars.length) brandBlock += 'Key differentiators: ' + pillars.join('; ') + '\n';
+    if (s.brandNotes) brandBlock += 'Other brand context: ' + s.brandNotes + '\n';
+    let personalBlock = '';
+    if (s.personalName || s.personalOneLiner || s.personalVoice || traits.length || s.personalNotes) {
+      personalBlock += 'Personal creator: ' + (s.personalName || '(unnamed)') + (s.personalOneLiner ? (' \u2014 ' + s.personalOneLiner) : '') + '\n';
+      if (s.personalVoice) personalBlock += 'Personal voice & tone: ' + s.personalVoice + '\n';
+      if (traits.length) personalBlock += 'Known for: ' + traits.join('; ') + '\n';
+      if (s.personalNotes) personalBlock += 'Other personal context: ' + s.personalNotes + '\n';
+    }
+    return { brandBlock, personalBlock };
+  }
+
+  async aiGenerate(){
+    const s = this.state;
+    this.setState({ generating: true, genError: '', justGenerated: false });
+    try {
+      const cat = (s.genCategory && s.genCategory !== 'all') ? s.categories.find(c => c.id === s.genCategory) : null;
+      const hooksText = (s.hooks||[]).map(h => h.text).join(', ');
+      const existing = (s.ideas||[]).slice(0,10).map(i => i.title).filter(Boolean).join('; ');
+      const inspo = (s.inspirations||[]).filter(i => i.name).map(p => p.name + ' (' + p.platform + ')' + (p.notes ? (' \u2014 ' + p.notes) : '')).join('\n');
+      const platform = s.genPlatform;
+      const context = s.genContext;
+      const rounds = s.genBatchSize || 1;
+      const { brandBlock, personalBlock } = this.buildVoiceAndBrandBlocks();
+      const model = (s.aiModel === 'sonnet') ? 'claude-sonnet-4-5' : 'claude-haiku-4-5';
+
+      if (cat) {
+        const { angles, structures } = this.getGenerationPools(cat);
+        if (!angles.length) throw new Error('Select at least one format to include for "' + cat.name + '".');
+        const effStructures = structures.length ? structures : [null];
+        const oneRound = [];
+        angles.forEach(angle => {
+          effStructures.forEach(st => {
+            const structureText = [st && st.text, angle.structure].filter(Boolean).join(' + ');
+            oneRound.push({ formatName: angle.name, formatHint: angle.structure || '', structureText });
+          });
+        });
+        const slots = [];
+        for (let r = 0; r < rounds; r++) slots.push(...oneRound);
+
+        const ownerLine = cat.owner === 'personal'
+          ? ('Write in the personal voice of ' + (s.personalName || 'the creator') + (s.personalVoice ? (' \u2014 voice: ' + s.personalVoice) : ''))
+          : ('Write in the "' + s.brandName + '" brand voice' + (s.brandVoice ? (' \u2014 voice: ' + s.brandVoice) : ''));
+
+        let prompt = brandBlock + (personalBlock ? ('\n' + personalBlock) : '') + '\n' + ownerLine + '.\n\n';
+        prompt += 'Content type: ' + cat.name + ' (' + cat.stage + '). ' + cat.desc + '\n\n';
+        if (hooksText) prompt += 'Hook formulas available: ' + hooksText + '\n\n';
+        if (inspo) prompt += 'Creators/pages they like for inspiration:\n' + inspo + '\n\n';
+        if (existing) prompt += 'Ideas already logged (avoid repeating):\n' + existing + '\n\n';
+        if (context) prompt += 'Context from the user right now: ' + context + '\n\n';
+        prompt += 'Generate exactly ' + slots.length + ' distinct video ideas, one for each numbered slot below, IN ORDER (do not skip, merge, or reorder):\n';
+        slots.forEach((slot, i) => {
+          prompt += (i+1) + '. Format: "' + slot.formatName + '"' + (slot.structureText ? (' \u2014 follow this structure: ' + slot.structureText) : '') + '\n';
+        });
+        prompt += '\nEach idea must be genuinely shaped by its format, not a generic idea with the format name tacked on \u2014 the title, hook, and notes should reflect what makes that specific format work (e.g. a "Founder Log" idea should read like a build update, while a "Hero\'s Journey" idea should read like a struggle-to-breakthrough arc). Two slots on the same underlying topic but different formats should produce visibly different ideas.' + (platform && platform !== 'Any' ? (' Ideas are for ' + platform + '.') : '') + ' Respond ONLY with a raw JSON array (no markdown fences, no commentary) of exactly ' + slots.length + ' objects, in the same order as the numbered list, shaped like: {"title": short idea title tailored to its format, "hook": one opening line, "notes": one sentence on how to shoot it, referencing the structure}.';
+
+        const text = await window.claude.complete({ messages: [{ role: 'user', content: prompt }], model, max_tokens: Math.min(4000, 500 + slots.length * 220) });
+        let parsed;
+        try { parsed = JSON.parse(text); } catch(e){ const m = text.match(/\[[\s\S]*\]/); parsed = m ? JSON.parse(m[0]) : null; }
+        if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('unexpected response format');
+
+        parsed.forEach((p, i) => {
+          const slot = slots[i] || slots[slots.length - 1];
+          this.addIdea({
+            title: p.title || (slot ? slot.formatName : 'Untitled idea'),
+            hook: p.hook || '',
+            platform: (platform && platform !== 'Any') ? platform : ['YouTube','Instagram','TikTok'][Math.floor(Math.random()*3)],
+            categoryId: cat.id,
+            notes: [p.notes || '', slot && slot.structureText ? ('Structure: ' + slot.structureText) : ''].filter(Boolean).join(' \u2014 ')
+          });
+        });
+      } else {
+        const cats = s.categories;
+        const frameworkText = cats.map(c => {
+          const pools = this.getGenerationPools(c);
+          const structuresText = (pools.structures||[]).map(st => st.text).filter(Boolean).join(' | ');
+          const angleLines = (pools.angles||[]).map(a => {
+            const struct = [structuresText, a.structure].filter(Boolean).join(' + ');
+            return a.name + (struct ? (' [structure: ' + struct + ']') : '');
+          }).join('; ');
+          return c.name + ' (' + c.stage + ', ' + (c.owner === 'personal' ? 'Personal' : 'Brand') + ')' + (structuresText ? (', structures: ' + structuresText) : '') + ': ' + c.desc + ' Formats: ' + angleLines;
+        }).join('\n');
+        const count = rounds;
+
+        let prompt = brandBlock + (personalBlock ? ('\n' + personalBlock) : '') + '\nYou are a content strategist helping generate short-form video content ideas. Each content type below is tagged Personal or Brand \u2014 write Personal-tagged ideas in the personal creator\'s voice, and Brand-tagged ideas in the brand voice.\n\nContent framework (content type \u2014 stage \u2014 owner \u2014 formats, each with its structure):\n' + frameworkText + '\n\nHook formulas: ' + hooksText + '\n\n';
+        if (inspo) prompt += 'Creators/pages they like for inspiration:\n' + inspo + '\n\n';
+        if (existing) prompt += 'Ideas already logged (avoid repeating):\n' + existing + '\n\n';
+        if (context) prompt += 'Context from the user right now: ' + context + '\n\n';
+        prompt += 'Generate ' + count + ' new, specific, non-generic content ideas' + (platform && platform !== 'Any' ? (' for ' + platform) : '') + '. Each idea must be genuinely shaped by its chosen format, not generic \u2014 the title, hook, and notes should reflect what makes that specific format distinct. Respond ONLY with a raw JSON array (no markdown fences, no commentary) of ' + count + ' objects shaped like: {"title": short idea title, "hook": one opening line, "category": one of [' + s.categories.map(c => c.name).join(', ') + '], "platform": "YouTube" or "Instagram" or "TikTok", "notes": one sentence on why or how to shoot it, including which structure to follow}.';
+
+        const text = await window.claude.complete({ messages: [{ role: 'user', content: prompt }], model, max_tokens: 1800 });
+        let parsed;
+        try { parsed = JSON.parse(text); } catch(e){ const m = text.match(/\[[\s\S]*\]/); parsed = m ? JSON.parse(m[0]) : null; }
+        if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('unexpected response format');
+
+        parsed.forEach(p => {
+          const catMatch = s.categories.find(c => c.name === p.category);
+          if (!catMatch){ this.addIdea({ title: p.title || 'Untitled idea', hook: p.hook || '', platform: p.platform || 'Any', categoryId: '', notes: p.notes || '' }); return; }
+          this.addIdea({ title: p.title || 'Untitled idea', hook: p.hook || '', platform: p.platform || 'Any', categoryId: catMatch.id, notes: p.notes || '' });
+        });
+      }
+
+      this.setState({ generating: false, justGenerated: true });
+    } catch(err){
+      this.setState({ generating: false, genError: 'Generation failed \u2014 try again. (' + (err && err.message ? err.message : 'unknown error') + ')' });
+    }
+  }
+
+  exportJSON(){
+    const { brandName, brandOneLiner, brandAudience, brandVoice, brandPillars, brandNotes, personalName, personalOneLiner, personalVoice, personalTraits, personalNotes, aiModel, genBatchSize, categories, hooks, ideas, inspirations } = this.state;
+    const data = { brandName, brandOneLiner, brandAudience, brandVoice, brandPillars, brandNotes, personalName, personalOneLiner, personalVoice, personalTraits, personalNotes, aiModel, genBatchSize, categories, hooks, ideas, inspirations };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = (brandName || 'content-idea-agent') + '-export.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  importJSON(e){
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        this.setState(data, () => this.persist());
+      } catch(err){ this.setState({ genError: 'Import failed \u2014 invalid file.' }); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }
+
+  renderVals(){
+    const s = this.state;
+    const catById = {}; (s.categories||[]).forEach(c => catById[c.id] = c);
+
+    const enrichIdea = (item) => {
+      const cat = catById[item.categoryId];
+      const expanded = !!(s.expandedIds && s.expandedIds[item.id]);
+      const scriptGenerating = !!(s.scriptGeneratingIds && s.scriptGeneratingIds[item.id]);
+      return {
+        ...item,
+        categoryName: cat ? cat.name : 'Uncategorized',
+        categoryStage: cat ? cat.stage : '',
+        hasCategory: !!cat,
+        titleDisplay: item.title || 'Untitled idea',
+        expanded,
+        collapsed: !expanded,
+        toggleExpand: () => this.toggleIdeaExpand(item.id),
+        createdDisplay: item.createdAt ? new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '',
+        categoryOptions: (s.categories||[]).map(c => ({ id: c.id, name: c.name })),
+        script: item.script || '',
+        scriptGenerating,
+        scriptButtonLabel: scriptGenerating ? 'Generating\u2026' : (item.script ? 'Regenerate script' : 'Generate script'),
+        showRegenPanel: !!(s.scriptRegenOpenIds && s.scriptRegenOpenIds[item.id]),
+        regenNote: (s.scriptRegenNotes && s.scriptRegenNotes[item.id]) || '',
+        setRegenNote: (e) => this.setRegenNote(item.id, e.target.value),
+        doScriptButtonClick: () => item.script ? this.openRegenPanel(item.id) : this.generateScript(item.id),
+        confirmRegen: () => this.generateScript(item.id, (s.scriptRegenNotes && s.scriptRegenNotes[item.id]) || ''),
+        cancelRegen: () => this.closeRegenPanel(item.id),
+        setScript: (e) => this.updateIdea(item.id, 'script', e.target.value),
+        setTitle: (e) => this.updateIdea(item.id, 'title', e.target.value),
+        setHook: (e) => this.updateIdea(item.id, 'hook', e.target.value),
+        setNotes: (e) => this.updateIdea(item.id, 'notes', e.target.value),
+        setLink: (e) => this.updateIdea(item.id, 'link', e.target.value),
+        setPlatform: (e) => this.updateIdea(item.id, 'platform', e.target.value),
+        setCategory: (e) => this.updateIdea(item.id, 'categoryId', e.target.value),
+        setStatus: (e) => this.setIdeaStatus(item.id, e.target.value),
+        doDelete: () => this.deleteIdea(item.id)
+      };
+    };
+
+    const ideasEnriched = (s.ideas||[]).map(enrichIdea);
+    const columns = ['idea','scripted','filmed','posted'].map(st => {
+      const items = ideasEnriched.filter(i => i.status === st);
+      return { status: st, label: st.charAt(0).toUpperCase()+st.slice(1), items, count: items.length, empty: items.length === 0 };
+    });
+
+    const categoriesEnriched = (s.categories||[]).map(c => {
+      const catExpanded = !!(s.expandedCategoryIds && s.expandedCategoryIds[c.id]);
+      return {
+      ...c,
+      owner: c.owner || 'brand',
+      expanded: catExpanded,
+      collapsed: !catExpanded,
+      toggleExpand: () => this.toggleCategoryExpand(c.id),
+      formatCount: (c.angles||[]).length,
+      structureCount: (c.structures||[]).length,
+      ownerLabel: c.owner === 'personal' ? 'Personal' : 'Brand',
+      setName: (e) => this.updateCategoryField(c.id, 'name', e.target.value),
+      setDesc: (e) => this.updateCategoryField(c.id, 'desc', e.target.value),
+      setStage: (e) => this.updateCategoryField(c.id, 'stage', e.target.value),
+      setOwner: (e) => this.updateCategoryField(c.id, 'owner', e.target.value),
+      removeCat: () => this.removeCategory(c.id),
+      addAngleHandler: () => this.addAngle(c.id),
+      addStructureHandler: () => this.addStructure(c.id),
+      structuresEnriched: (c.structures||[]).map(st => ({ ...st, setText: (e) => this.updateStructure(c.id, st.id, e.target.value), remove: () => this.removeStructure(c.id, st.id) })),
+      angles: c.angles.map(a => ({
+        ...a,
+        setName: (e) => this.updateAngleField(c.id, a.id, 'name', e.target.value),
+        setStructure: (e) => this.updateAngleField(c.id, a.id, 'structure', e.target.value),
+        remove: () => this.removeAngle(c.id, a.id)
+      }))
+    };});
+
+    const hooksEnriched = (s.hooks||[]).map(h => ({ ...h, setText: (e) => this.updateHook(h.id, e.target.value), remove: () => this.removeHook(h.id) }));
+
+    const brandPillarsEnriched = (s.brandPillars||[]).map(p => ({ ...p, setText: (e) => this.updateBrandPillar(p.id, e.target.value), remove: () => this.removeBrandPillar(p.id) }));
+    const personalTraitsEnriched = (s.personalTraits||[]).map(p => ({ ...p, setText: (e) => this.updatePersonalTrait(p.id, e.target.value), remove: () => this.removePersonalTrait(p.id) }));
+
+    const genCategoryChips = [{ id: 'all', name: 'All categories' }].concat((s.categories||[]).map(c => ({ id: c.id, name: c.name }))).map(c => {
+      const active = s.genCategory === c.id;
+      return { id: c.id, name: c.name, active, style: this.buildChipStyle(active), select: () => this.setState({ genCategory: c.id }) };
+    });
+
+    const activeGenCat = (s.genCategory && s.genCategory !== 'all') ? (s.categories||[]).find(c => c.id === s.genCategory) : null;
+    const genFormatCheckboxes = activeGenCat ? activeGenCat.angles.map(a => ({ id: a.id, name: a.name, checked: this.isFormatChecked(a.id), toggle: () => this.toggleFormatCheck(a.id) })) : [];
+    const genStructureCheckboxes = activeGenCat ? (activeGenCat.structures||[]).map(st => ({ id: st.id, text: st.text || '(untitled structure)', checked: this.isStructureChecked(st.id), toggle: () => this.toggleStructureCheck(st.id) })) : [];
+
+    const platformOptions = ['Any','YouTube','Instagram','TikTok'];
+    const genPlatformChips = platformOptions.map(p => {
+      const active = s.genPlatform === p;
+      return { id: p, name: p, active, style: this.buildChipStyle(active), select: () => this.setState({ genPlatform: p }) };
+    });
+
+    const inspirationsEnriched = (s.inspirations||[]).map(insp => ({
+      ...insp,
+      hasLink: !!insp.link,
+      setName: (e) => this.updateInspiration(insp.id, 'name', e.target.value),
+      setHandle: (e) => this.updateInspiration(insp.id, 'handle', e.target.value),
+      setPlatform: (e) => this.updateInspiration(insp.id, 'platform', e.target.value),
+      setLink: (e) => this.updateInspiration(insp.id, 'link', e.target.value),
+      setNotes: (e) => this.updateInspiration(insp.id, 'notes', e.target.value),
+      remove: () => this.removeInspiration(insp.id),
+      catChips: (s.categories||[]).map(c => {
+        const active = (insp.tags||[]).includes(c.id);
+        return { id: c.id, name: c.name, active, style: this.buildChipStyle(active), toggle: () => this.toggleInspirationTag(insp.id, c.id) };
+      })
+    }));
+
+    return {
+      isBrand: s.activeTab === 'brand', isBrandInactive: s.activeTab !== 'brand',
+      isGenerate: s.activeTab === 'generate', isGenerateInactive: s.activeTab !== 'generate',
+      isIdeas: s.activeTab === 'ideas', isIdeasInactive: s.activeTab !== 'ideas',
+      isFrameworks: s.activeTab === 'frameworks', isFrameworksInactive: s.activeTab !== 'frameworks',
+      isInspiration: s.activeTab === 'inspiration', isInspirationInactive: s.activeTab !== 'inspiration',
+      brandName: s.brandName,
+      setBrandName: (e) => this.setBrandName(e),
+      brandOneLiner: s.brandOneLiner,
+      setBrandOneLiner: this.setField('brandOneLiner'),
+      brandAudience: s.brandAudience,
+      setBrandAudience: this.setField('brandAudience'),
+      brandVoice: s.brandVoice,
+      setBrandVoice: this.setField('brandVoice'),
+      brandNotes: s.brandNotes,
+      setBrandNotes: this.setField('brandNotes'),
+      brandPillarsEnriched,
+      addBrandPillarHandler: () => this.addBrandPillar(),
+      personalName: s.personalName,
+      setPersonalName: this.setField('personalName'),
+      personalOneLiner: s.personalOneLiner,
+      setPersonalOneLiner: this.setField('personalOneLiner'),
+      personalVoice: s.personalVoice,
+      setPersonalVoice: this.setField('personalVoice'),
+      personalNotes: s.personalNotes,
+      setPersonalNotes: this.setField('personalNotes'),
+      personalTraitsEnriched,
+      addPersonalTraitHandler: () => this.addPersonalTrait(),
+      setTabBrand: () => this.setState({ activeTab: 'brand' }),
+      setTabGenerate: () => this.setState({ activeTab: 'generate' }),
+      setTabIdeas: () => this.setState({ activeTab: 'ideas' }),
+      setTabFrameworks: () => this.setState({ activeTab: 'frameworks' }),
+      setTabInspiration: () => this.setState({ activeTab: 'inspiration' }),
+      ideasCount: ideasEnriched.length,
+      inspirationCount: inspirationsEnriched.length,
+      inspirationEmpty: inspirationsEnriched.length === 0,
+      columns,
+      genContext: s.genContext,
+      setGenContext: (e) => this.setState({ genContext: e.target.value }),
+      genCategoryChips,
+      hasScopedCategory: !!activeGenCat,
+      genFormatCheckboxes,
+      hasStructureCheckboxes: genStructureCheckboxes.length > 0,
+      genStructureCheckboxes,
+      genPlatformChips,
+      genBatchSize: s.genBatchSize,
+      setGenBatchSize: (e) => this.setGenBatchSize(e),
+      modelHaikuStyle: this.buildChipStyle(s.aiModel === 'haiku'),
+      modelSonnetStyle: this.buildChipStyle(s.aiModel === 'sonnet'),
+      setModelHaiku: () => this.setAiModel('haiku'),
+      setModelSonnet: () => this.setAiModel('sonnet'),
+      generating: s.generating,
+      aiButtonLabel: s.generating ? 'Generating\u2026' : 'Generate with AI',
+      genError: s.genError,
+      doQuickSpin: () => this.quickSpin(),
+      doAiGenerate: () => this.aiGenerate(),
+      justGenerated: s.justGenerated,
+      goToBoard: () => this.setState({ activeTab: 'ideas', justGenerated: false }),
+      categoriesEnriched,
+      addCategoryHandler: () => this.addCategory(),
+      hooksEnriched,
+      addHookHandler: () => this.addHook(),
+      inspirationsEnriched,
+      addInspirationHandler: () => this.addInspiration(),
+      exportHandler: () => this.exportJSON(),
+      importHandler: (e) => this.importJSON(e)
+    };
+  }
+}
+
+</script>
+</body>
+</html>
