@@ -196,7 +196,8 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
       // Merge rather than replace, so re-analysing one video (or a partial batch) doesn't wipe out results for videos not in this run.
       const newIds = new Set(newResults.map((r) => r.videoId));
       const mergedResults = [...(insp.youtubeAnalysis?.results || []).filter((r) => !newIds.has(r.videoId)), ...newResults];
-      app.updateInspirationYoutube(insp.id, { youtubeAnalysis: { generatedAt: Date.now(), avgViews, results: mergedResults } });
+      const generatedAt = Date.now();
+      app.updateInspirationYoutube(insp.id, { youtubeAnalysis: { generatedAt, avgViews, results: mergedResults } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed — try again.");
     } finally {
@@ -280,114 +281,109 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
       )}
 
       {videos.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 }}>
           {videos.map((v) => {
             const isOutlier = outlierIds.has(v.id);
             const analysis = analysisById.get(v.id);
             const minimized = isMinimized(v);
-            const hasBadges = isOutlier || !!analysis;
             return (
               <div
                 key={v.id}
                 style={{
-                  position: "relative",
                   display: "flex",
                   flexDirection: "column",
-                  gap: 8,
                   background: "var(--color-surface)",
-                  padding: 10,
-                  paddingRight: hasBadges ? 82 : 10,
                   border: isOutlier ? "1px solid var(--color-accent)" : `1px solid ${muted(15)}`,
                 }}
               >
-                {hasBadges && (
-                  <div style={{ position: "absolute", top: 6, right: 6, display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
-                    {isOutlier && <span style={{ fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "1px 6px", whiteSpace: "nowrap" }}>Outlier</span>}
-                    {analysis && <span style={{ fontSize: 10, background: "var(--color-neutral-100)", color: "var(--color-neutral-800)", padding: "1px 6px", whiteSpace: "nowrap" }}>Analysed</span>}
-                  </div>
-                )}
-
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(v.id)}
-                    onChange={() => toggleSelected(v.id)}
-                    style={{ accentColor: "var(--color-accent)", width: 15, height: 15, flexShrink: 0, marginTop: 2 }}
-                  />
+                <div style={{ position: "relative", aspectRatio: "16 / 9", background: muted(10), flexShrink: 0 }}>
                   {v.thumbnail && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={v.thumbnail} alt="" width={110} height={62} style={{ objectFit: "cover", flexShrink: 0 }} className="grayscale" />
+                    <img src={v.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} className="grayscale" />
                   )}
-                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text)" }}>{v.title}</span>
-                    {minimized && <span style={{ fontSize: 11, color: muted(55) }}>{fmtViews(v.viewCount)} views</span>}
+                  <div style={{ position: "absolute", top: 5, left: 5, background: "rgba(255,255,255,0.9)", display: "flex", padding: 1 }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(v.id)}
+                      onChange={() => toggleSelected(v.id)}
+                      style={{ accentColor: "var(--color-accent)", width: 15, height: 15, display: "block" }}
+                    />
                   </div>
-                  <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-                    {analysis && (
+                  <div style={{ position: "absolute", top: 5, right: 5, display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
+                    {isOutlier && <span style={{ fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "1px 6px", whiteSpace: "nowrap" }}>Outlier</span>}
+                    {analysis && <span style={{ fontSize: 10, background: "var(--color-neutral-100)", color: "var(--color-neutral-800)", padding: "1px 6px", whiteSpace: "nowrap" }}>Analysed</span>}
+                    <div style={{ display: "flex", gap: 1 }}>
+                      {analysis && (
+                        <button
+                          onClick={() => handleReanalyzeOne(v.id)}
+                          disabled={analyzing}
+                          title="Analyse again — reuses the existing transcript and picks up any changes to Analysis instructions"
+                          style={{ border: "none", background: "rgba(255,255,255,0.9)", padding: "2px 4px", color: muted(70), cursor: analyzing ? "default" : "pointer", fontSize: 13, lineHeight: 1 }}
+                        >
+                          ↻
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleReanalyzeOne(v.id)}
-                        disabled={analyzing}
-                        title="Analyse again — reuses the existing transcript and picks up any changes to Analysis instructions"
-                        style={{ border: "none", background: "none", padding: "2px 4px", color: muted(65), cursor: analyzing ? "default" : "pointer", fontSize: 13 }}
+                        onClick={() => toggleMinimized(v)}
+                        title={minimized ? "Expand" : "Collapse"}
+                        style={{ border: "none", background: "rgba(255,255,255,0.9)", padding: "2px 4px", color: muted(70), cursor: "pointer", fontSize: 11, lineHeight: 1 }}
                       >
-                        ↻
+                        {minimized ? "▸" : "▾"}
                       </button>
-                    )}
-                    <button
-                      onClick={() => toggleMinimized(v)}
-                      title={minimized ? "Expand" : "Collapse"}
-                      style={{ border: "none", background: "none", padding: "2px 4px", color: muted(65), cursor: "pointer", fontSize: 11 }}
-                    >
-                      {minimized ? "▸" : "▾"}
-                    </button>
+                    </div>
                   </div>
                 </div>
 
-                {!minimized && (
-                  <>
-                    <div style={{ fontSize: 11, color: muted(55) }}>
-                      {fmtViews(v.viewCount)} views · {new Date(v.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                      {v.transcriptStatus === "unavailable" && " · no transcript available"}
-                      {v.transcriptStatus === "ok" && v.transcript && (
-                        <>
-                          {" · "}
-                          <button
-                            onClick={() => toggleTranscriptExpanded(v.id)}
-                            style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--color-accent-800)", textDecoration: "underline", cursor: "pointer" }}
-                          >
-                            {expandedTranscriptIds.has(v.id) ? "hide transcript" : `view transcript (${v.transcript.length.toLocaleString()} chars)`}
-                          </button>
-                        </>
+                <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text)" }}>{v.title}</span>
+                  <span style={{ fontSize: 11, color: muted(55) }}>
+                    {fmtViews(v.viewCount)} views · {new Date(v.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+
+                  {!minimized && (
+                    <>
+                      {v.transcriptStatus !== "not_fetched" && (
+                        <div style={{ fontSize: 11, color: muted(55) }}>
+                          {v.transcriptStatus === "unavailable" && "No transcript available"}
+                          {v.transcriptStatus === "ok" && v.transcript && (
+                            <button
+                              onClick={() => toggleTranscriptExpanded(v.id)}
+                              style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--color-accent-800)", textDecoration: "underline", cursor: "pointer" }}
+                            >
+                              {expandedTranscriptIds.has(v.id) ? "hide transcript" : `view transcript (${v.transcript.length.toLocaleString()} chars)`}
+                            </button>
+                          )}
+                        </div>
                       )}
-                    </div>
-                    {v.transcriptStatus === "ok" && v.transcript && expandedTranscriptIds.has(v.id) && (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          lineHeight: 1.5,
-                          color: muted(70),
-                          maxHeight: 180,
-                          overflowY: "auto",
-                          background: "var(--color-bg)",
-                          border: `1px solid ${muted(15)}`,
-                          padding: 8,
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        {v.transcript}
-                      </div>
-                    )}
-                    {analysis && (
-                      <div style={{ fontSize: 12, color: "var(--color-text)" }}>
-                        {Object.entries(analysis.fields || {}).map(([key, value]) => (
-                          <div key={key}>
-                            <strong>{labelFromKey(key)}:</strong> <AnalysisFieldView value={value} />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
+                      {v.transcriptStatus === "ok" && v.transcript && expandedTranscriptIds.has(v.id) && (
+                        <div
+                          style={{
+                            fontSize: 11,
+                            lineHeight: 1.5,
+                            color: muted(70),
+                            maxHeight: 180,
+                            overflowY: "auto",
+                            background: "var(--color-bg)",
+                            border: `1px solid ${muted(15)}`,
+                            padding: 8,
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {v.transcript}
+                        </div>
+                      )}
+                      {analysis && (
+                        <div style={{ fontSize: 12, color: "var(--color-text)" }}>
+                          {Object.entries(analysis.fields || {}).map(([key, value]) => (
+                            <div key={key}>
+                              <strong>{labelFromKey(key)}:</strong> <AnalysisFieldView value={value} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}
