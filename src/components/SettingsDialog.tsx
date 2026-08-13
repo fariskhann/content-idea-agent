@@ -1,0 +1,63 @@
+"use client";
+
+import { useApp } from "@/lib/AppContext";
+import { input, kicker, muted, primaryBtn, secondaryBtn } from "@/lib/styles";
+
+export function SettingsDialog() {
+  const app = useApp();
+  if (!app.settingsOpen) return null;
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, display: "grid", placeItems: "center", padding: 16, background: "color-mix(in srgb, var(--color-neutral-900) 50%, transparent)", zIndex: 50 }}
+      onClick={() => app.setSettingsOpen(false)}
+    >
+      <div
+        style={{ width: "min(480px, 100%)", display: "flex", flexDirection: "column", gap: 16, padding: 24, background: "var(--color-bg)", border: "2px solid var(--color-divider)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>API keys</h2>
+          <p style={{ fontSize: 13, color: muted(60), margin: 0 }}>
+            Stored only in this browser&apos;s local storage — sent directly from your browser to Anthropic / YouTube, never through a server you don&apos;t control.
+          </p>
+        </div>
+
+        <div>
+          <div style={kicker}>Anthropic API key</div>
+          <input
+            type="password"
+            value={app.settings.anthropicApiKey}
+            onChange={(e) => app.updateSettings({ anthropicApiKey: e.target.value })}
+            placeholder="sk-ant-..."
+            style={input}
+          />
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>Used for Generate with AI, script generation, and Inspiration analysis.</div>
+        </div>
+
+        <div>
+          <div style={kicker}>YouTube Data API key</div>
+          <input
+            type="password"
+            value={app.settings.youtubeApiKey}
+            onChange={(e) => app.updateSettings({ youtubeApiKey: e.target.value })}
+            placeholder="AIza..."
+            style={input}
+          />
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
+            API-key-only credential from Google Cloud Console (no OAuth needed) — used to pull channel video lists in Inspiration.
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+          <button style={secondaryBtn} onClick={() => app.setSettingsOpen(false)}>
+            Close
+          </button>
+          <button style={primaryBtn} onClick={() => app.setSettingsOpen(false)}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
