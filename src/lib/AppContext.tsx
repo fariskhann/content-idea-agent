@@ -14,6 +14,7 @@ import {
 import { complete, parseJsonArray } from "./ai";
 import { getModel, costUsd } from "./models";
 import { loadUsageLog, saveUsageLog, type UsageLogEntry } from "./usage";
+import { loadTranscriptLog, saveTranscriptLog } from "./transcriptUsage";
 import type {
   AppData,
   Category,
@@ -53,6 +54,7 @@ interface AppState {
   settingsOpen: boolean;
   usageLog: UsageLogEntry[];
   usageDialogOpen: boolean;
+  transcriptLog: number[];
 }
 
 function initialAppState(): AppState {
@@ -72,10 +74,11 @@ function initialAppState(): AppState {
     expandedCategoryIds: {},
     genFormatChecks: {},
     genStructureChecks: {},
-    settings: { anthropicApiKey: "", deepseekApiKey: "", youtubeApiKey: "" },
+    settings: { anthropicApiKey: "", deepseekApiKey: "", youtubeApiKey: "", supadataApiKey: "", supadataResetDay: 0 },
     settingsOpen: false,
     usageLog: [],
     usageDialogOpen: false,
+    transcriptLog: [],
   };
 }
 
@@ -99,7 +102,7 @@ function useAppStore() {
     } catch {
       // ignore corrupt storage
     }
-    setState((s) => ({ ...s, settings: loadSettings(), usageLog: loadUsageLog() }));
+    setState((s) => ({ ...s, settings: loadSettings(), usageLog: loadUsageLog(), transcriptLog: loadTranscriptLog() }));
     setHydrated(true);
   }, []);
 
@@ -320,6 +323,15 @@ function useAppStore() {
   }, []);
   const setUsageDialogOpen = useCallback((open: boolean) => setState((s) => ({ ...s, usageDialogOpen: open })), []);
 
+  /** Logs one Supadata transcript call against the local free-tier estimate shown in Settings. */
+  const logTranscriptFetch = useCallback(() => {
+    setState((s) => {
+      const transcriptLog = [...s.transcriptLog, Date.now()].slice(-1000);
+      saveTranscriptLog(transcriptLog);
+      return { ...s, transcriptLog };
+    });
+  }, []);
+
   // ---- generation ----
   const quickSpin = useCallback(() => {
     const d = state.data;
@@ -501,6 +513,11 @@ function useAppStore() {
   const updateSettings = useCallback((patch: Partial<Settings>) => {
     setState((s) => {
       const settings = { ...s.settings, ...patch };
+      // First time a Supadata key is saved, anchor the free-tier reset estimate to today —
+      // the user can correct it in Settings once they know their actual Supadata billing date.
+      if (patch.supadataApiKey && !s.settings.supadataApiKey && !settings.supadataResetDay) {
+        settings.supadataResetDay = Math.min(new Date().getDate(), 28);
+      }
       saveSettings(settings);
       return { ...s, settings };
     });
@@ -572,6 +589,7 @@ function useAppStore() {
     logUsage,
     clearUsage,
     setUsageDialogOpen,
+    logTranscriptFetch,
   };
 }
 

@@ -33,11 +33,23 @@ export async function fetchChannelVideos(opts: { apiKey: string; ref: string; ma
   return data;
 }
 
-export async function fetchTranscript(videoId: string): Promise<{ status: "ok" | "unavailable"; text?: string }> {
-  const res = await fetch(`/api/youtube/transcript?videoId=${encodeURIComponent(videoId)}`);
-  const data = await res.json();
-  if (!res.ok) return { status: "unavailable" };
-  return data;
+export type TranscriptFetchStatus = "ok" | "unavailable" | "no_key" | "invalid_key" | "quota_exceeded" | "error";
+
+export interface TranscriptFetchResult {
+  status: TranscriptFetchStatus;
+  text?: string;
+  error?: string;
+}
+
+export async function fetchTranscript(videoId: string, apiKey: string): Promise<TranscriptFetchResult> {
+  if (!apiKey) return { status: "no_key" };
+  const params = new URLSearchParams({ videoId, apiKey });
+  const res = await fetch(`/api/youtube/transcript?${params.toString()}`);
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) return { status: "invalid_key", error: data?.error };
+  if (res.status === 429) return { status: "quota_exceeded", error: data?.error };
+  if (!res.ok) return { status: "error", error: data?.error || `Failed to fetch transcript (${res.status}).` };
+  return { status: data.status === "ok" ? "ok" : "unavailable", text: data.text };
 }
 
 export const DEFAULT_YOUTUBE_ANALYSIS_INSTRUCTIONS =

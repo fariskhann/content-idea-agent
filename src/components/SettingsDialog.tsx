@@ -3,10 +3,13 @@
 import { useApp } from "@/lib/AppContext";
 import { input, kicker, muted, primaryBtn, secondaryBtn } from "@/lib/styles";
 import { MODELS, providerLabel } from "@/lib/models";
+import { computeSupadataUsage } from "@/lib/transcriptUsage";
 
 export function SettingsDialog() {
   const app = useApp();
   if (!app.settingsOpen) return null;
+
+  const supadataUsage = computeSupadataUsage(app.transcriptLog, app.settings.supadataResetDay);
 
   return (
     <div
@@ -20,8 +23,8 @@ export function SettingsDialog() {
         <div>
           <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>Settings</h2>
           <p style={{ fontSize: 13, color: muted(60), margin: 0 }}>
-            Stored only in this browser&apos;s local storage. Anthropic and YouTube calls go straight from your browser; DeepSeek calls route through this
-            app&apos;s own server (its API doesn&apos;t support direct browser requests) but the key never touches anywhere else.
+            Stored only in this browser&apos;s local storage. Anthropic and YouTube calls go straight from your browser; DeepSeek and Supadata calls route
+            through this app&apos;s own server (their APIs don&apos;t support direct browser requests) but the key never touches anywhere else.
           </p>
         </div>
 
@@ -78,6 +81,48 @@ export function SettingsDialog() {
           />
           <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
             API-key-only credential from Google Cloud Console (no OAuth needed) — used to pull channel video lists in Inspiration.
+          </div>
+        </div>
+
+        <div>
+          <div style={kicker}>Supadata API key</div>
+          <input
+            type="password"
+            value={app.settings.supadataApiKey}
+            onChange={(e) => app.updateSettings({ supadataApiKey: e.target.value })}
+            placeholder="sd_..."
+            style={input}
+          />
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
+            Used to fetch video transcripts for analysis in Inspiration. Free tier: {supadataUsage.limit}/month.
+          </div>
+          {app.settings.supadataApiKey && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 8, padding: "8px 10px", background: "var(--color-surface)" }}>
+              <div style={{ fontSize: 12 }}>
+                <strong>
+                  {supadataUsage.used} / {supadataUsage.limit}
+                </strong>{" "}
+                transcripts used this cycle · resets in {supadataUsage.daysUntilReset}d ({supadataUsage.resetDate.toLocaleDateString()})
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                <label htmlFor="supadata-reset-day" style={{ fontSize: 11, color: muted(55) }}>
+                  Renews on day
+                </label>
+                <input
+                  id="supadata-reset-day"
+                  type="number"
+                  min={1}
+                  max={28}
+                  value={app.settings.supadataResetDay || 1}
+                  onChange={(e) => app.updateSettings({ supadataResetDay: Math.min(Math.max(Number(e.target.value) || 1, 1), 28) })}
+                  style={{ ...input, width: 56, padding: "4px 6px" }}
+                />
+              </div>
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: muted(50), marginTop: 4 }}>
+            This count is tracked locally as an estimate — Supadata doesn&apos;t expose a usage API. Set &quot;renews on day&quot; to match your actual
+            billing date from the Supadata dashboard for accuracy.
           </div>
         </div>
 

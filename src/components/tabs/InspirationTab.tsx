@@ -88,17 +88,32 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
     try {
       const updatedVideos = [...videos];
       const withTranscripts: YoutubeVideo[] = [];
+      let transcriptWarning = "";
+      let stopFetchingTranscripts = false;
       for (const selected of selectedVideos) {
         let current = selected;
-        if (current.transcriptStatus !== "ok" && current.transcriptStatus !== "unavailable") {
-          const result = await fetchTranscript(current.id);
-          current = { ...current, transcript: result.text, transcriptStatus: result.status };
+        if (!stopFetchingTranscripts && current.transcriptStatus !== "ok" && current.transcriptStatus !== "unavailable") {
+          const result = await fetchTranscript(current.id, app.settings.supadataApiKey);
+          if (result.status === "ok" || result.status === "unavailable") {
+            // Both outcomes reached Supadata and likely consumed a credit — only no_key/invalid_key/quota_exceeded don't.
+            app.logTranscriptFetch();
+            current = { ...current, transcript: result.text, transcriptStatus: result.status };
+          } else {
+            stopFetchingTranscripts = true;
+            transcriptWarning =
+              result.status === "no_key"
+                ? "Add your Supadata API key in Settings to include transcripts — continuing without them."
+                : result.status === "quota_exceeded"
+                  ? "Supadata free-tier limit reached for this cycle — continuing without transcripts."
+                  : (result.error || "Transcript fetch failed — continuing without transcripts.");
+          }
           const idx = updatedVideos.findIndex((v) => v.id === current.id);
           if (idx !== -1) updatedVideos[idx] = current;
         }
         withTranscripts.push(current);
       }
       app.updateInspirationYoutube(insp.id, { youtubeVideos: updatedVideos });
+      if (transcriptWarning) setError(transcriptWarning);
 
       const prompt = buildYoutubeAnalysisPrompt(app.data, insp.name || insp.handle, avgViews, withTranscripts, taggedCategories);
       const model = getModel(app.data.aiModel);
