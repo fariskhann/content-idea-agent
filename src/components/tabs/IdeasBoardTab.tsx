@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/lib/AppContext";
-import { fieldLabel, muted, pageTitle, removeBtn } from "@/lib/styles";
+import { chipStyle, fieldLabel, muted, pageTitle, removeBtn } from "@/lib/styles";
 import type { Idea, IdeaStatus } from "@/lib/types";
 
 const COLUMNS: { status: IdeaStatus; label: string }[] = [
@@ -9,6 +9,12 @@ const COLUMNS: { status: IdeaStatus; label: string }[] = [
   { status: "scripted", label: "Scripted" },
   { status: "filmed", label: "Filmed" },
   { status: "posted", label: "Posted" },
+];
+
+const BOARD_FILTERS: { value: "All" | "YouTube" | "IGTikTok"; label: string }[] = [
+  { value: "All", label: "All" },
+  { value: "YouTube", label: "YouTube" },
+  { value: "IGTikTok", label: "IG + TikTok" },
 ];
 
 function IdeaCard({ idea }: { idea: Idea }) {
@@ -175,12 +181,23 @@ function IdeaCard({ idea }: { idea: Idea }) {
 
 export function IdeasBoardTab() {
   const app = useApp();
-  const ideas = app.data.ideas;
+  const ideas = app.data.ideas.filter((i) => {
+    if (app.activeBoardPlatform === "All") return true;
+    if (app.activeBoardPlatform === "YouTube") return i.platform === "YouTube";
+    return i.platform === "Instagram" || i.platform === "TikTok";
+  });
 
   return (
     <div>
       <h1 style={pageTitle}>Ideas board</h1>
-      <p style={{ fontSize: 15, color: muted(65), margin: "0 0 26px" }}>{ideas.length} ideas total. Click a title to open the full card and edit anything.</p>
+      <p style={{ fontSize: 15, color: muted(65), margin: "0 0 20px" }}>{ideas.length} ideas total. Click a title to open the full card and edit anything.</p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+        {BOARD_FILTERS.map((f) => (
+          <button key={f.value} style={chipStyle(app.activeBoardPlatform === f.value)} onClick={() => app.setActiveBoardPlatform(f.value)}>
+            {f.label}
+          </button>
+        ))}
+      </div>
       <div style={{ display: "flex", gap: 24, overflowX: "auto", paddingBottom: 12 }}>
         {COLUMNS.map((col) => {
           const items = ideas.filter((i) => i.status === col.status);

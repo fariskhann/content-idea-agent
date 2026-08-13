@@ -2,7 +2,7 @@
 
 import { useApp } from "@/lib/AppContext";
 import { ghostAddBtn, inputSm, kicker, muted, pageSubtitle, pageTitle, removeBtn, textarea } from "@/lib/styles";
-import type { Category, Owner, Stage } from "@/lib/types";
+import type { Category, Owner, PlatformGroup, Stage } from "@/lib/types";
 
 function CategoryCard({ cat }: { cat: Category }) {
   const app = useApp();
@@ -19,6 +19,15 @@ function CategoryCard({ cat }: { cat: Category }) {
           onChange={(e) => app.updateCategoryField(cat.id, "name", e.target.value)}
           style={{ flex: 1, border: "none", borderBottom: "1px solid transparent", background: "transparent", fontFamily: "var(--font-heading)", fontSize: 19, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--color-text)", padding: "2px 0" }}
         />
+        <select
+          key={`${cat.id}-${cat.platform}`}
+          value={cat.platform}
+          onChange={(e) => app.updateCategoryField(cat.id, "platform", e.target.value as PlatformGroup)}
+          style={{ fontSize: 12, padding: "5px 8px", border: "1px solid var(--color-divider)", background: "var(--color-bg)", color: "var(--color-text)" }}
+        >
+          <option value="YouTube">YouTube</option>
+          <option value="IGTikTok">IG + TikTok</option>
+        </select>
         <select
           value={cat.stage}
           onChange={(e) => app.updateCategoryField(cat.id, "stage", e.target.value as Stage)}
@@ -44,7 +53,8 @@ function CategoryCard({ cat }: { cat: Category }) {
 
       {!expanded && (
         <div style={{ fontSize: 13, color: muted(60) }}>
-          {cat.angles.length} formats · {cat.structures.length} structures · {cat.owner === "personal" ? "Personal" : "Brand"}
+          {cat.platform === "YouTube" ? "YouTube" : "IG + TikTok"} · {cat.angles.length} formats · {cat.structures.length} structures ·{" "}
+          {cat.owner === "personal" ? "Personal" : "Brand"}
         </div>
       )}
 
@@ -117,19 +127,48 @@ function CategoryCard({ cat }: { cat: Category }) {
   );
 }
 
+const FRAMEWORKS_GROUPS: { value: PlatformGroup; label: string }[] = [
+  { value: "YouTube", label: "YouTube" },
+  { value: "IGTikTok", label: "Instagram + TikTok" },
+];
+
 export function FrameworksTab() {
   const app = useApp();
   const d = app.data;
+  const catsInGroup = d.categories.filter((c) => c.platform === app.activeFrameworksPlatform);
 
   return (
     <div style={{ maxWidth: 820 }}>
       <h1 style={pageTitle}>Your content framework</h1>
       <p style={pageSubtitle}>Content types, their formats, and the structure that makes each one work. Edit any of it — the generator reads straight from here.</p>
 
-      {d.categories.map((cat) => (
+      <div style={{ display: "flex", gap: 2, borderBottom: `1px solid ${muted(25)}`, marginBottom: 24 }}>
+        {FRAMEWORKS_GROUPS.map((g) => {
+          const active = app.activeFrameworksPlatform === g.value;
+          return (
+            <button
+              key={g.value}
+              onClick={() => app.setActiveFrameworksPlatform(g.value)}
+              style={{
+                padding: "9px 12px",
+                borderBottom: `2px solid ${active ? "var(--color-accent)" : "transparent"}`,
+                background: active ? "var(--color-surface)" : "transparent",
+                color: active ? "var(--color-accent-700)" : "var(--color-text)",
+                cursor: active ? "default" : "pointer",
+                fontSize: 13,
+                fontWeight: active ? 800 : 400,
+              }}
+            >
+              {g.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {catsInGroup.map((cat) => (
         <CategoryCard key={cat.id} cat={cat} />
       ))}
-      <button onClick={app.addCategory} style={{ ...ghostAddBtn, padding: 12, fontSize: 13, width: "100%", marginBottom: 32 }}>
+      <button onClick={() => app.addCategory(app.activeFrameworksPlatform)} style={{ ...ghostAddBtn, padding: 12, fontSize: 13, width: "100%", marginBottom: 32 }}>
         + Add content type
       </button>
 

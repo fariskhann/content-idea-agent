@@ -22,6 +22,7 @@ import type {
   IdeaStatus,
   Inspiration,
   Platform,
+  PlatformGroup,
   TabId,
 } from "./types";
 
@@ -38,7 +39,10 @@ interface AppState {
   data: AppData;
   activeTab: TabId;
   genCategory: string;
-  genPlatform: Platform;
+  genPlatformGroup: PlatformGroup;
+  genIgTiktokChoice: "Instagram" | "TikTok" | "Either";
+  activeFrameworksPlatform: PlatformGroup;
+  activeBoardPlatform: "All" | "YouTube" | "IGTikTok";
   genContext: string;
   generating: boolean;
   genError: string;
@@ -63,7 +67,10 @@ function initialAppState(): AppState {
     data: defaultSeed(),
     activeTab: "generate",
     genCategory: "all",
-    genPlatform: "Any",
+    genPlatformGroup: "YouTube",
+    genIgTiktokChoice: "Either",
+    activeFrameworksPlatform: "YouTube",
+    activeBoardPlatform: "All",
     genContext: "",
     generating: false,
     genError: "",
@@ -106,6 +113,11 @@ function useAppStore() {
       if (raw) {
         const saved = JSON.parse(raw);
         if (saved && Array.isArray(saved.categories)) {
+          // Backfill categories persisted before Category.platform existed — non-destructive, idempotent.
+          saved.categories = saved.categories.map((c: Category) => ({
+            ...c,
+            platform: c.platform === "YouTube" || c.platform === "IGTikTok" ? c.platform : "YouTube",
+          }));
           setState((s) => ({ ...s, data: { ...s.data, ...saved } }));
         }
       }
@@ -168,10 +180,13 @@ function useAppStore() {
     [setData]
   );
   const addCategory = useCallback(
-    () =>
+    (platform: PlatformGroup) =>
       setData((d) => ({
         ...d,
-        categories: [...d.categories, { id: genId(), name: "New content type", stage: "TOF", owner: "brand", desc: "", structures: [], angles: [] }],
+        categories: [
+          ...d.categories,
+          { id: genId(), name: "New content type", platform, stage: "TOF", owner: "brand", desc: "", structures: [], angles: [] },
+        ],
       })),
     [setData]
   );
@@ -351,17 +366,26 @@ function useAppStore() {
   // ---- generation ----
   const quickSpin = useCallback(() => {
     const d = state.data;
-    if (!d.categories.length) return;
+    const catsInGroup = d.categories.filter((c) => c.platform === state.genPlatformGroup);
+    if (!catsInGroup.length) {
+      setState((s) => ({ ...s, genError: `No content types yet for this platform — add one in Frameworks.` }));
+      return;
+    }
     const rounds = d.genBatchSize || 1;
     const newIdeas: Partial<Idea>[] = [];
     for (let i = 0; i < rounds; i++) {
-      const cat = state.genCategory !== "all" ? d.categories.find((c) => c.id === state.genCategory) : d.categories[Math.floor(Math.random() * d.categories.length)];
+      const cat = state.genCategory !== "all" ? d.categories.find((c) => c.id === state.genCategory) : catsInGroup[Math.floor(Math.random() * catsInGroup.length)];
       if (!cat || !cat.angles.length) {
         setState((s) => ({ ...s, genError: `Add at least one format to "${cat ? cat.name : "this category"}" first, in Frameworks.` }));
         return;
       }
       const hook = d.hooks.length ? d.hooks[Math.floor(Math.random() * d.hooks.length)] : null;
-      const platform: Platform = state.genPlatform !== "Any" ? state.genPlatform : (["YouTube", "Instagram", "TikTok"] as const)[Math.floor(Math.random() * 3)];
+      const platform: Platform =
+        state.genPlatformGroup === "YouTube"
+          ? "YouTube"
+          : state.genIgTiktokChoice !== "Either"
+            ? state.genIgTiktokChoice
+            : (["Instagram", "TikTok"] as const)[Math.floor(Math.random() * 2)];
       const hookLine = hook ? `Open with a "${hook.text}"...` : "";
       const pools = getPoolsFor(cat);
       const ideas = expandIdeas(cat, "", hookLine, platform, "", pools);
@@ -373,7 +397,7 @@ function useAppStore() {
     }
     newIdeas.forEach((idea) => addIdea(idea));
     setState((s) => ({ ...s, genError: "", justGenerated: true }));
-  }, [state.data, state.genCategory, state.genPlatform, getPoolsFor, addIdea]);
+  }, [state.data, state.genCategory, state.genPlatformGroup, state.genIgTiktokChoice, getPoolsFor, addIdea]);
 
   const aiGenerate = useCallback(async () => {
     const d = state.data;
@@ -383,10 +407,15 @@ function useAppStore() {
       const rounds = d.genBatchSize || 1;
       const model = getModel(d.aiModel);
       const apiKeys = { anthropicApiKey: state.settings.anthropicApiKey, deepseekApiKey: state.settings.deepseekApiKey };
+      const platformGroup = state.genPlatformGroup;
+      const igTtChoice = state.genIgTiktokChoice;
+      const pickPlatform = (): Platform =>
+        platformGroup === "YouTube" ? "YouTube" : igTtChoice !== "Either" ? igTtChoice : (["Instagram", "TikTok"] as const)[Math.floor(Math.random() * 2)];
+      const platformLabel = platformGroup === "YouTube" ? "YouTube" : igTtChoice !== "Either" ? igTtChoice : "Instagram or TikTok";
 
       if (cat) {
         const pools = getPoolsFor(cat);
-        const { prompt, slots } = buildAiGeneratePromptForCategory(d, cat, pools, state.genPlatform, state.genContext, rounds);
+        const { prompt, slots } = buildAiGeneratePromptForCategory(d, cat, pools, platformLabel, state.genContext, rounds);
         const { text, usage } = await complete({
           model,
           apiKeys,
@@ -409,13 +438,14 @@ function useAppStore() {
           addIdea({
             title: p.title || (slot ? slot.formatName : "Untitled idea"),
             hook: p.hook || "",
-            platform: state.genPlatform !== "Any" ? state.genPlatform : (["YouTube", "Instagram", "TikTok"] as const)[Math.floor(Math.random() * 3)],
+            platform: pickPlatform(),
             categoryId: cat.id,
             notes: [p.notes || "", slot?.structureText ? "Structure: " + slot.structureText : ""].filter(Boolean).join(" — "),
           });
         });
       } else {
-        const prompt = buildAiGeneratePromptGeneric(d, getPoolsFor, state.genPlatform, state.genContext, rounds);
+        const catsInGroup = d.categories.filter((c) => c.platform === platformGroup);
+        const prompt = buildAiGeneratePromptGeneric(d, catsInGroup, getPoolsFor, platformLabel, state.genContext, rounds);
         const { text, usage } = await complete({ model, apiKeys, prompt, maxTokens: 1800 });
         logUsage({
           feature: "generate",
@@ -429,11 +459,11 @@ function useAppStore() {
         const parsed = parseJsonArray(text) as AiGenParsedItem[] | null;
         if (!parsed || !parsed.length) throw new Error("unexpected response format");
         parsed.forEach((p) => {
-          const catMatch = d.categories.find((c) => c.name === p.category);
+          const catMatch = catsInGroup.find((c) => c.name === p.category);
           addIdea({
             title: p.title || "Untitled idea",
             hook: p.hook || "",
-            platform: (p as { platform?: Platform }).platform || "Any",
+            platform: (p as { platform?: Platform }).platform || pickPlatform(),
             categoryId: catMatch ? catMatch.id : "",
             notes: p.notes || "",
           });
@@ -443,7 +473,7 @@ function useAppStore() {
     } catch (err) {
       setState((s) => ({ ...s, generating: false, genError: "Generation failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" }));
     }
-  }, [state.data, state.genCategory, state.genPlatform, state.genContext, state.settings.anthropicApiKey, state.settings.deepseekApiKey, getPoolsFor, addIdea, logUsage]);
+  }, [state.data, state.genCategory, state.genPlatformGroup, state.genIgTiktokChoice, state.genContext, state.settings.anthropicApiKey, state.settings.deepseekApiKey, getPoolsFor, addIdea, logUsage]);
 
   const generateScript = useCallback(
     async (id: string, instruction?: string) => {
@@ -492,7 +522,13 @@ function useAppStore() {
   const setAiModel = useCallback((modelId: string) => setData((d) => ({ ...d, aiModel: modelId })), [setData]);
   const setGenBatchSize = useCallback((v: number) => setData((d) => ({ ...d, genBatchSize: v })), [setData]);
   const setGenCategory = useCallback((id: string) => setState((s) => ({ ...s, genCategory: id, genFormatChecks: {}, genStructureChecks: {} })), []);
-  const setGenPlatform = useCallback((p: Platform) => setState((s) => ({ ...s, genPlatform: p })), []);
+  const setGenPlatformGroup = useCallback(
+    (p: PlatformGroup) => setState((s) => ({ ...s, genPlatformGroup: p, genCategory: "all", genFormatChecks: {}, genStructureChecks: {} })),
+    []
+  );
+  const setGenIgTiktokChoice = useCallback((v: "Instagram" | "TikTok" | "Either") => setState((s) => ({ ...s, genIgTiktokChoice: v })), []);
+  const setActiveFrameworksPlatform = useCallback((p: PlatformGroup) => setState((s) => ({ ...s, activeFrameworksPlatform: p })), []);
+  const setActiveBoardPlatform = useCallback((p: "All" | "YouTube" | "IGTikTok") => setState((s) => ({ ...s, activeBoardPlatform: p })), []);
   const setGenContext = useCallback((v: string) => setState((s) => ({ ...s, genContext: v })), []);
 
   // ---- export / import ----
@@ -617,7 +653,10 @@ function useAppStore() {
     setAiModel,
     setGenBatchSize,
     setGenCategory,
-    setGenPlatform,
+    setGenPlatformGroup,
+    setGenIgTiktokChoice,
+    setActiveFrameworksPlatform,
+    setActiveBoardPlatform,
     setGenContext,
     exportJSON,
     importJSON,

@@ -1,4 +1,6 @@
 export type Platform = "Any" | "YouTube" | "Instagram" | "TikTok";
+/** The platform group a Category belongs to — Instagram and TikTok are merged into one group for content-type/format purposes. */
+export type PlatformGroup = "YouTube" | "IGTikTok";
 export type Stage = "TOF" | "MOF" | "BOF";
 export type Owner = "brand" | "personal";
 export type IdeaStatus = "idea" | "scripted" | "filmed" | "posted";
@@ -17,6 +19,7 @@ export interface Angle {
 export interface Category {
   id: string;
   name: string;
+  platform: PlatformGroup;
   stage: Stage;
   owner: Owner;
   desc: string;

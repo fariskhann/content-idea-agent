@@ -25,6 +25,7 @@ export function defaultSeed(): AppData {
       {
         id: "yap",
         name: "Yap",
+        platform: "IGTikTok",
         stage: "TOF",
         owner: "personal",
         desc: "Raw, direct-to-camera. Builds reach and trust — no hard CTA, just posted.",
@@ -49,6 +50,7 @@ export function defaultSeed(): AppData {
       {
         id: "storytelling",
         name: "Storytelling",
+        platform: "IGTikTok",
         stage: "MOF",
         owner: "personal",
         desc: "Longer-form personal storytelling. Alternate between two formats.",
@@ -69,6 +71,7 @@ export function defaultSeed(): AppData {
       {
         id: "vlog",
         name: "Vlog",
+        platform: "YouTube",
         stage: "MOF",
         owner: "personal",
         desc: "Day-in-the-life documentation. Reveal the setup early, withhold the outcome.",
@@ -99,6 +102,7 @@ export function defaultSeed(): AppData {
       {
         id: "brand",
         name: "Brand / Drop",
+        platform: "YouTube",
         stage: "BOF",
         owner: "brand",
         desc: "Product-focused. The actual conversion destination.",

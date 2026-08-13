@@ -2,29 +2,57 @@
 
 import { useApp } from "@/lib/AppContext";
 import { chipStyle, kicker, muted, pageSubtitle, pageTitle, primaryBtn, secondaryBtn, textarea } from "@/lib/styles";
-import type { Platform } from "@/lib/types";
+import type { PlatformGroup } from "@/lib/types";
 
-const PLATFORMS: Platform[] = ["Any", "YouTube", "Instagram", "TikTok"];
+const PLATFORM_GROUPS: { value: PlatformGroup; label: string }[] = [
+  { value: "YouTube", label: "YouTube" },
+  { value: "IGTikTok", label: "Instagram + TikTok" },
+];
+
+const IG_TIKTOK_CHOICES = ["Instagram", "TikTok", "Either"] as const;
 
 export function GenerateTab() {
   const app = useApp();
   const d = app.data;
+  const catsInGroup = d.categories.filter((c) => c.platform === app.genPlatformGroup);
   const activeCat = app.genCategory !== "all" ? d.categories.find((c) => c.id === app.genCategory) : null;
 
   return (
     <div style={{ maxWidth: 760 }}>
       <h1 style={pageTitle}>Generate ideas</h1>
       <p style={pageSubtitle}>
-        Pick a category and platform, add context if you&apos;ve got it, then spin up ideas — quick combinatorial spins, or AI-written concepts using your
+        Pick a platform, then a category and context if you&apos;ve got it, then spin up ideas — quick combinatorial spins, or AI-written concepts using your
         framework and inspiration board.
       </p>
+
+      <div style={{ ...kicker, marginBottom: 10 }}>Platform</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 22 }}>
+        {PLATFORM_GROUPS.map((g) => (
+          <button key={g.value} style={chipStyle(app.genPlatformGroup === g.value)} onClick={() => app.setGenPlatformGroup(g.value)}>
+            {g.label}
+          </button>
+        ))}
+      </div>
+
+      {app.genPlatformGroup === "IGTikTok" && (
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ ...kicker, marginBottom: 10 }}>Instagram or TikTok</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {IG_TIKTOK_CHOICES.map((v) => (
+              <button key={v} style={chipStyle(app.genIgTiktokChoice === v)} onClick={() => app.setGenIgTiktokChoice(v)}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ ...kicker, marginBottom: 10 }}>Category</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 22 }}>
         <button style={chipStyle(app.genCategory === "all")} onClick={() => app.setGenCategory("all")}>
           All categories
         </button>
-        {d.categories.map((c) => (
+        {catsInGroup.map((c) => (
           <button key={c.id} style={chipStyle(app.genCategory === c.id)} onClick={() => app.setGenCategory(c.id)}>
             {c.name}
           </button>
@@ -67,15 +95,6 @@ export function GenerateTab() {
           )}
         </div>
       )}
-
-      <div style={{ ...kicker, marginBottom: 10 }}>Platform</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 24 }}>
-        {PLATFORMS.map((p) => (
-          <button key={p} style={chipStyle(app.genPlatform === p)} onClick={() => app.setGenPlatform(p)}>
-            {p}
-          </button>
-        ))}
-      </div>
 
       <div style={{ ...kicker, marginBottom: 10 }}>Context (optional)</div>
       <textarea

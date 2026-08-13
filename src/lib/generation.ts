@@ -105,7 +105,7 @@ export function buildAiGeneratePromptForCategory(
   data: AppData,
   cat: Category,
   pools: GenerationPools,
-  platform: Platform,
+  platform: string,
   context: string,
   rounds: number
 ): { prompt: string; slots: Slot[] } {
@@ -140,7 +140,7 @@ export function buildAiGeneratePromptForCategory(
   });
   prompt +=
     "\nEach idea must be genuinely shaped by its format, not a generic idea with the format name tacked on — the title, hook, and notes should reflect what makes that specific format work (e.g. a \"Founder Log\" idea should read like a build update, while a \"Hero's Journey\" idea should read like a struggle-to-breakthrough arc). Two slots on the same underlying topic but different formats should produce visibly different ideas." +
-    (platform && platform !== "Any" ? " Ideas are for " + platform + "." : "") +
+    (platform ? " Ideas are for " + platform + "." : "") +
     " Respond ONLY with a raw JSON array (no markdown fences, no commentary) of exactly " +
     slots.length +
     ' objects, in the same order as the numbered list, shaped like: {"title": short idea title tailored to its format, "hook": one opening line, "notes": one sentence on how to shoot it, referencing the structure}.';
@@ -150,12 +150,13 @@ export function buildAiGeneratePromptForCategory(
 
 export function buildAiGeneratePromptGeneric(
   data: AppData,
+  categories: Category[],
   getPoolsForCat: (cat: Category) => GenerationPools,
-  platform: Platform,
+  platformLabel: string,
   context: string,
   rounds: number
 ): string {
-  const frameworkText = data.categories
+  const frameworkText = categories
     .map((c) => {
       const pools = getPoolsForCat(c);
       const structuresText = pools.structures.map((st) => st.text).filter(Boolean).join(" | ");
@@ -194,6 +195,8 @@ export function buildAiGeneratePromptGeneric(
   const { brandBlock, personalBlock } = buildVoiceAndBrandBlocks(data);
   const count = rounds;
 
+  const platformOptionsText = platformLabel === "YouTube" ? '"YouTube"' : '"Instagram" or "TikTok"';
+
   let prompt =
     brandBlock +
     (personalBlock ? "\n" + personalBlock : "") +
@@ -209,12 +212,14 @@ export function buildAiGeneratePromptGeneric(
     "Generate " +
     count +
     " new, specific, non-generic content ideas" +
-    (platform && platform !== "Any" ? " for " + platform : "") +
+    (platformLabel ? " for " + platformLabel : "") +
     ". Each idea must be genuinely shaped by its chosen format, not generic — the title, hook, and notes should reflect what makes that specific format distinct. Respond ONLY with a raw JSON array (no markdown fences, no commentary) of " +
     count +
     ' objects shaped like: {"title": short idea title, "hook": one opening line, "category": one of [' +
-    data.categories.map((c) => c.name).join(", ") +
-    '], "platform": "YouTube" or "Instagram" or "TikTok", "notes": one sentence on why or how to shoot it, including which structure to follow}.';
+    categories.map((c) => c.name).join(", ") +
+    '], "platform": ' +
+    platformOptionsText +
+    ', "notes": one sentence on why or how to shoot it, including which structure to follow}.';
 
   return prompt;
 }
