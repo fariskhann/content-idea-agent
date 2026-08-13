@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { chipStyle, muted, pageSubtitle, pageTitle, primaryBtn, removeBtn, textarea as textareaStyle } from "@/lib/styles";
+import { chipStyle, muted, pageSubtitle, pageTitle, primaryBtn, removeBtn } from "@/lib/styles";
 import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt } from "@/lib/youtube";
@@ -43,6 +43,7 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState("");
   const [expandedTranscriptIds, setExpandedTranscriptIds] = useState<Set<string>>(new Set());
+  const [minimizedOverrides, setMinimizedOverrides] = useState<Record<string, boolean>>({});
 
   function toggleTranscriptExpanded(id: string) {
     setExpandedTranscriptIds((prev) => {
@@ -58,13 +59,24 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
   const outlierIds = new Set(outliers.map((v) => v.id));
   const analysisById = new Map<string, YoutubeOutlierResult>((insp.youtubeAnalysis?.results || []).map((r) => [r.videoId, r]));
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(outlierIds));
+  /** Videos that have already had a transcript attempt or an analysis run default to minimised; freshly fetched ones stay expanded until processed. */
+  function isMinimized(v: YoutubeVideo): boolean {
+    const override = minimizedOverrides[v.id];
+    if (override !== undefined) return override;
+    return v.transcriptStatus !== "not_fetched" || analysisById.has(v.id);
+  }
 
-  // Re-default the selection to the freshly computed outliers each time a fetch lands.
+  function toggleMinimized(v: YoutubeVideo) {
+    setMinimizedOverrides((prev) => ({ ...prev, [v.id]: !isMinimized(v) }));
+  }
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  // Reset the selection (not the outlier highlighting) each time a fresh fetch lands.
   const [lastSeenFetch, setLastSeenFetch] = useState(insp.youtubeLastFetched);
   if (lastSeenFetch !== insp.youtubeLastFetched) {
     setLastSeenFetch(insp.youtubeLastFetched);
-    setSelectedIds(new Set(outliers.map((v) => v.id)));
+    setSelectedIds(new Set());
   }
 
   function toggleSelected(id: string) {
@@ -103,7 +115,8 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
     }
   }
 
-  async function handleAnalyze() {
+  /** Shared by the batch "Analyse videos" button and the per-video re-analyse icon. A transcript already marked "ok" is never re-fetched; "unavailable"/"not_fetched" always gets another attempt, since a missing transcript should only ever be a temporary state, not a permanent skip. */
+  async function runAnalysis(targetVideos: YoutubeVideo[]) {
     setError("");
     const selectedModel = getModel(app.data.aiModel);
     const hasKey = selectedModel.provider === "anthropic" ? !!app.settings.anthropicApiKey : !!app.settings.deepseekApiKey;
@@ -111,8 +124,7 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
       setError(`Add your ${providerLabel(selectedModel.provider)} API key in Settings first.`);
       return;
     }
-    const selectedVideos = videos.filter((v) => selectedIds.has(v.id));
-    if (!selectedVideos.length) {
+    if (!targetVideos.length) {
       setError("Tick at least one video to analyze.");
       return;
     }
@@ -122,9 +134,9 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
       const withTranscripts: YoutubeVideo[] = [];
       let transcriptWarning = "";
       let stopFetchingTranscripts = false;
-      for (const selected of selectedVideos) {
+      for (const selected of targetVideos) {
         let current = selected;
-        if (!stopFetchingTranscripts && current.transcriptStatus !== "ok" && current.transcriptStatus !== "unavailable") {
+        if (!stopFetchingTranscripts && current.transcriptStatus !== "ok") {
           const result = await fetchTranscript(current.id, app.settings.supadataApiKey);
           if (result.status === "ok" || result.status === "unavailable") {
             // Both outcomes reached Supadata and likely consumed a credit — only no_key/invalid_key/quota_exceeded don't.
@@ -153,13 +165,9 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
         model,
         apiKeys: { anthropicApiKey: app.settings.anthropicApiKey, deepseekApiKey: app.settings.deepseekApiKey },
         prompt,
-        // Cutting off at 1400 tokens for a single video (previous budget) means per-video answers
-        // are now far longer than the old generic 2-3 sentence default — likely because custom
-        // Analysis instructions are actually being followed now (see the schema-override fix).
+        // max_tokens is a ceiling, not a guaranteed spend — err high since structured multi-part
+        // breakdowns from custom Analysis instructions need much more room than a plain sentence.
         // Capped at 60000 to stay under Claude Haiku 4.5's 64K output ceiling with margin.
-        // 7000 (previous budget for a single video) still cut off — structured multi-part
-        // breakdowns from custom Analysis instructions need much more room per video than a
-        // plain 2-3 sentence answer. max_tokens is a ceiling, not a guaranteed spend, so err high.
         maxTokens: Math.min(60000, Math.max(20000, withTranscripts.length * 6000)),
       });
       app.logUsage({
@@ -181,11 +189,14 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
         const snippet = text.length > 300 ? text.slice(0, 300) + "…" : text;
         throw new Error(`Unexpected response format — model didn't return valid JSON. Raw response: "${snippet}"`);
       }
-      const results: YoutubeOutlierResult[] = parsed.map((p) => {
+      const newResults: YoutubeOutlierResult[] = parsed.map((p) => {
         const { videoId, ...fields } = p;
         return { videoId: typeof videoId === "string" ? videoId : "", fields: fields as Record<string, AnalysisFieldType> };
       });
-      app.updateInspirationYoutube(insp.id, { youtubeAnalysis: { generatedAt: Date.now(), avgViews, results } });
+      // Merge rather than replace, so re-analysing one video (or a partial batch) doesn't wipe out results for videos not in this run.
+      const newIds = new Set(newResults.map((r) => r.videoId));
+      const mergedResults = [...(insp.youtubeAnalysis?.results || []).filter((r) => !newIds.has(r.videoId)), ...newResults];
+      app.updateInspirationYoutube(insp.id, { youtubeAnalysis: { generatedAt: Date.now(), avgViews, results: mergedResults } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed — try again.");
     } finally {
@@ -193,10 +204,20 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
     }
   }
 
-  /** Clears cached transcript status/text and any prior AI notes so the next analyze run starts clean — useful after fixing the transcript provider, since "unavailable" videos are otherwise never retried automatically. */
+  async function handleAnalyze() {
+    await runAnalysis(videos.filter((v) => selectedIds.has(v.id)));
+  }
+
+  async function handleReanalyzeOne(id: string) {
+    const video = videos.find((v) => v.id === id);
+    if (video) await runAnalysis([video]);
+  }
+
+  /** Clears cached transcript status/text and any prior AI notes so the next analyze run starts clean. */
   function handleReset() {
     const resetVideos = videos.map((v) => ({ ...v, transcript: undefined, transcriptStatus: "not_fetched" as const }));
     app.updateInspirationYoutube(insp.id, { youtubeVideos: resetVideos, youtubeAnalysis: undefined });
+    setMinimizedOverrides({});
     setError("");
   }
 
@@ -249,8 +270,8 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
 
       {videos.length > 0 && (
         <div style={{ fontSize: 11, color: muted(55) }}>
-          Average views this batch: {fmtViews(avgViews)} · {outliers.length} outlier{outliers.length === 1 ? "" : "s"} flagged (≥1.5× average) · outliers are
-          ticked by default, but you can tick/untick any video below
+          Average views this batch: {fmtViews(avgViews)} · {outliers.length} outlier{outliers.length === 1 ? "" : "s"} flagged (≥1.5× average) · tick any video
+          below to include it in analysis
         </div>
       )}
 
@@ -259,72 +280,114 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
       )}
 
       {videos.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 10 }}>
           {videos.map((v) => {
             const isOutlier = outlierIds.has(v.id);
             const analysis = analysisById.get(v.id);
+            const minimized = isMinimized(v);
+            const hasBadges = isOutlier || !!analysis;
             return (
               <div
                 key={v.id}
-                style={{ display: "flex", gap: 10, background: "var(--color-surface)", padding: 10, border: isOutlier ? "1px solid var(--color-accent)" : `1px solid ${muted(15)}` }}
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  background: "var(--color-surface)",
+                  padding: 10,
+                  paddingRight: hasBadges ? 82 : 10,
+                  border: isOutlier ? "1px solid var(--color-accent)" : `1px solid ${muted(15)}`,
+                }}
               >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(v.id)}
-                  onChange={() => toggleSelected(v.id)}
-                  style={{ accentColor: "var(--color-accent)", width: 15, height: 15, flexShrink: 0, marginTop: 2 }}
-                />
-                {v.thumbnail && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={v.thumbnail} alt="" width={110} height={62} style={{ objectFit: "cover", flexShrink: 0 }} className="grayscale" />
+                {hasBadges && (
+                  <div style={{ position: "absolute", top: 6, right: 6, display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
+                    {isOutlier && <span style={{ fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "1px 6px", whiteSpace: "nowrap" }}>Outlier</span>}
+                    {analysis && <span style={{ fontSize: 10, background: "var(--color-neutral-100)", color: "var(--color-neutral-800)", padding: "1px 6px", whiteSpace: "nowrap" }}>Analysed</span>}
+                  </div>
                 )}
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(v.id)}
+                    onChange={() => toggleSelected(v.id)}
+                    style={{ accentColor: "var(--color-accent)", width: 15, height: 15, flexShrink: 0, marginTop: 2 }}
+                  />
+                  {v.thumbnail && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={v.thumbnail} alt="" width={110} height={62} style={{ objectFit: "cover", flexShrink: 0 }} className="grayscale" />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text)" }}>{v.title}</span>
-                    {isOutlier && <span style={{ fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "1px 6px" }}>Outlier</span>}
+                    {minimized && <span style={{ fontSize: 11, color: muted(55) }}>{fmtViews(v.viewCount)} views</span>}
                   </div>
-                  <div style={{ fontSize: 11, color: muted(55) }}>
-                    {fmtViews(v.viewCount)} views · {new Date(v.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                    {v.transcriptStatus === "unavailable" && " · no transcript available"}
-                    {v.transcriptStatus === "ok" && v.transcript && (
-                      <>
-                        {" · "}
-                        <button
-                          onClick={() => toggleTranscriptExpanded(v.id)}
-                          style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--color-accent-800)", textDecoration: "underline", cursor: "pointer" }}
-                        >
-                          {expandedTranscriptIds.has(v.id) ? "hide transcript" : `view transcript (${v.transcript.length.toLocaleString()} chars)`}
-                        </button>
-                      </>
+                  <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                    {analysis && (
+                      <button
+                        onClick={() => handleReanalyzeOne(v.id)}
+                        disabled={analyzing}
+                        title="Analyse again — reuses the existing transcript and picks up any changes to Analysis instructions"
+                        style={{ border: "none", background: "none", padding: "2px 4px", color: muted(65), cursor: analyzing ? "default" : "pointer", fontSize: 13 }}
+                      >
+                        ↻
+                      </button>
                     )}
-                  </div>
-                  {v.transcriptStatus === "ok" && v.transcript && expandedTranscriptIds.has(v.id) && (
-                    <div
-                      style={{
-                        fontSize: 11,
-                        lineHeight: 1.5,
-                        color: muted(70),
-                        maxHeight: 180,
-                        overflowY: "auto",
-                        background: "var(--color-bg)",
-                        border: `1px solid ${muted(15)}`,
-                        padding: 8,
-                        whiteSpace: "pre-wrap",
-                      }}
+                    <button
+                      onClick={() => toggleMinimized(v)}
+                      title={minimized ? "Expand" : "Collapse"}
+                      style={{ border: "none", background: "none", padding: "2px 4px", color: muted(65), cursor: "pointer", fontSize: 11 }}
                     >
-                      {v.transcript}
-                    </div>
-                  )}
-                  {analysis && (
-                    <div style={{ fontSize: 12, color: "var(--color-text)", marginTop: 2 }}>
-                      {Object.entries(analysis.fields || {}).map(([key, value]) => (
-                        <div key={key}>
-                          <strong>{labelFromKey(key)}:</strong> <AnalysisFieldView value={value} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                      {minimized ? "▸" : "▾"}
+                    </button>
+                  </div>
                 </div>
+
+                {!minimized && (
+                  <>
+                    <div style={{ fontSize: 11, color: muted(55) }}>
+                      {fmtViews(v.viewCount)} views · {new Date(v.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      {v.transcriptStatus === "unavailable" && " · no transcript available"}
+                      {v.transcriptStatus === "ok" && v.transcript && (
+                        <>
+                          {" · "}
+                          <button
+                            onClick={() => toggleTranscriptExpanded(v.id)}
+                            style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--color-accent-800)", textDecoration: "underline", cursor: "pointer" }}
+                          >
+                            {expandedTranscriptIds.has(v.id) ? "hide transcript" : `view transcript (${v.transcript.length.toLocaleString()} chars)`}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {v.transcriptStatus === "ok" && v.transcript && expandedTranscriptIds.has(v.id) && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          lineHeight: 1.5,
+                          color: muted(70),
+                          maxHeight: 180,
+                          overflowY: "auto",
+                          background: "var(--color-bg)",
+                          border: `1px solid ${muted(15)}`,
+                          padding: 8,
+                          whiteSpace: "pre-wrap",
+                        }}
+                      >
+                        {v.transcript}
+                      </div>
+                    )}
+                    {analysis && (
+                      <div style={{ fontSize: 12, color: "var(--color-text)" }}>
+                        {Object.entries(analysis.fields || {}).map(([key, value]) => (
+                          <div key={key}>
+                            <strong>{labelFromKey(key)}:</strong> <AnalysisFieldView value={value} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             );
           })}
@@ -397,14 +460,6 @@ function InspirationDetail({ insp }: { insp: Inspiration }) {
           );
         })}
       </div>
-
-      <textarea
-        value={insp.notes}
-        onChange={(e) => app.updateInspiration(insp.id, "notes", e.target.value)}
-        placeholder="What do you like about their content?"
-        rows={3}
-        style={{ ...textareaStyle, maxWidth: 640 }}
-      />
 
       {insp.platform === "YouTube" && (
         <ErrorBoundary
