@@ -20,6 +20,16 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
   const [fetching, setFetching] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState("");
+  const [expandedTranscriptIds, setExpandedTranscriptIds] = useState<Set<string>>(new Set());
+
+  function toggleTranscriptExpanded(id: string) {
+    setExpandedTranscriptIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const videos = insp.youtubeVideos || [];
   const { avgViews, outliers } = computeOutliers(videos);
@@ -246,7 +256,35 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
                   <div style={{ fontSize: 11, color: muted(55) }}>
                     {fmtViews(v.viewCount)} views · {new Date(v.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                     {v.transcriptStatus === "unavailable" && " · no transcript available"}
+                    {v.transcriptStatus === "ok" && v.transcript && (
+                      <>
+                        {" · "}
+                        <button
+                          onClick={() => toggleTranscriptExpanded(v.id)}
+                          style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--color-accent-800)", textDecoration: "underline", cursor: "pointer" }}
+                        >
+                          {expandedTranscriptIds.has(v.id) ? "hide transcript" : `view transcript (${v.transcript.length.toLocaleString()} chars)`}
+                        </button>
+                      </>
+                    )}
                   </div>
+                  {v.transcriptStatus === "ok" && v.transcript && expandedTranscriptIds.has(v.id) && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        lineHeight: 1.5,
+                        color: muted(70),
+                        maxHeight: 180,
+                        overflowY: "auto",
+                        background: "var(--color-bg)",
+                        border: `1px solid ${muted(15)}`,
+                        padding: 8,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {v.transcript}
+                    </div>
+                  )}
                   {analysis && (
                     <div style={{ fontSize: 12, color: "var(--color-text)", marginTop: 2 }}>
                       <div>

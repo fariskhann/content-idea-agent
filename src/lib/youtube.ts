@@ -94,7 +94,7 @@ export function buildYoutubeAnalysisPrompt(
   prompt +=
     'Respond ONLY with a raw JSON array (no markdown fences, no commentary) of exactly ' +
     videos.length +
-    ' objects, one per video above in the same order, shaped like: {"videoId": the Video ID given above, "why": 2-3 sentences on why it likely worked (or underperformed), "borrow": 1-2 sentences on what to adapt into which of our content types}.';
+    ' objects, one per video above in the same order, each shaped like {"videoId": the Video ID given above, "why": ..., "borrow": ...} — follow the instructions above for what "why" and "borrow" should each contain.';
 
   return prompt;
 }
