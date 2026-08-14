@@ -40,7 +40,6 @@ interface AppState {
   activeTab: TabId;
   genCategory: string;
   genPlatformGroup: PlatformGroup;
-  genIgTiktokChoice: "Instagram" | "TikTok" | "Either";
   activeFrameworksPlatform: PlatformGroup;
   activeBoardPlatform: "All" | "YouTube" | "IGTikTok";
   genContext: string;
@@ -68,7 +67,6 @@ function initialAppState(): AppState {
     activeTab: "generate",
     genCategory: "all",
     genPlatformGroup: "YouTube",
-    genIgTiktokChoice: "Either",
     activeFrameworksPlatform: "YouTube",
     activeBoardPlatform: "All",
     genContext: "",
@@ -380,12 +378,7 @@ function useAppStore() {
         return;
       }
       const hook = d.hooks.length ? d.hooks[Math.floor(Math.random() * d.hooks.length)] : null;
-      const platform: Platform =
-        state.genPlatformGroup === "YouTube"
-          ? "YouTube"
-          : state.genIgTiktokChoice !== "Either"
-            ? state.genIgTiktokChoice
-            : (["Instagram", "TikTok"] as const)[Math.floor(Math.random() * 2)];
+      const platform: Platform = state.genPlatformGroup === "YouTube" ? "YouTube" : "Instagram";
       const hookLine = hook ? `Open with a "${hook.text}"...` : "";
       const pools = getPoolsFor(cat);
       const ideas = expandIdeas(cat, "", hookLine, platform, "", pools);
@@ -397,7 +390,7 @@ function useAppStore() {
     }
     newIdeas.forEach((idea) => addIdea(idea));
     setState((s) => ({ ...s, genError: "", justGenerated: true }));
-  }, [state.data, state.genCategory, state.genPlatformGroup, state.genIgTiktokChoice, getPoolsFor, addIdea]);
+  }, [state.data, state.genCategory, state.genPlatformGroup, getPoolsFor, addIdea]);
 
   const aiGenerate = useCallback(async () => {
     const d = state.data;
@@ -408,10 +401,8 @@ function useAppStore() {
       const model = getModel(d.aiModel);
       const apiKeys = { anthropicApiKey: state.settings.anthropicApiKey, deepseekApiKey: state.settings.deepseekApiKey };
       const platformGroup = state.genPlatformGroup;
-      const igTtChoice = state.genIgTiktokChoice;
-      const pickPlatform = (): Platform =>
-        platformGroup === "YouTube" ? "YouTube" : igTtChoice !== "Either" ? igTtChoice : (["Instagram", "TikTok"] as const)[Math.floor(Math.random() * 2)];
-      const platformLabel = platformGroup === "YouTube" ? "YouTube" : igTtChoice !== "Either" ? igTtChoice : "Instagram or TikTok";
+      const pickPlatform = (): Platform => (platformGroup === "YouTube" ? "YouTube" : "Instagram");
+      const platformLabel = platformGroup === "YouTube" ? "YouTube" : "Instagram or TikTok";
 
       if (cat) {
         const pools = getPoolsFor(cat);
@@ -473,7 +464,7 @@ function useAppStore() {
     } catch (err) {
       setState((s) => ({ ...s, generating: false, genError: "Generation failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" }));
     }
-  }, [state.data, state.genCategory, state.genPlatformGroup, state.genIgTiktokChoice, state.genContext, state.settings.anthropicApiKey, state.settings.deepseekApiKey, getPoolsFor, addIdea, logUsage]);
+  }, [state.data, state.genCategory, state.genPlatformGroup, state.genContext, state.settings.anthropicApiKey, state.settings.deepseekApiKey, getPoolsFor, addIdea, logUsage]);
 
   const generateScript = useCallback(
     async (id: string, instruction?: string) => {
@@ -526,7 +517,6 @@ function useAppStore() {
     (p: PlatformGroup) => setState((s) => ({ ...s, genPlatformGroup: p, genCategory: "all", genFormatChecks: {}, genStructureChecks: {} })),
     []
   );
-  const setGenIgTiktokChoice = useCallback((v: "Instagram" | "TikTok" | "Either") => setState((s) => ({ ...s, genIgTiktokChoice: v })), []);
   const setActiveFrameworksPlatform = useCallback((p: PlatformGroup) => setState((s) => ({ ...s, activeFrameworksPlatform: p })), []);
   const setActiveBoardPlatform = useCallback((p: "All" | "YouTube" | "IGTikTok") => setState((s) => ({ ...s, activeBoardPlatform: p })), []);
   const setGenContext = useCallback((v: string) => setState((s) => ({ ...s, genContext: v })), []);
@@ -654,7 +644,6 @@ function useAppStore() {
     setGenBatchSize,
     setGenCategory,
     setGenPlatformGroup,
-    setGenIgTiktokChoice,
     setActiveFrameworksPlatform,
     setActiveBoardPlatform,
     setGenContext,

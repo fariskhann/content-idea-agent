@@ -9,8 +9,6 @@ const PLATFORM_GROUPS: { value: PlatformGroup; label: string }[] = [
   { value: "IGTikTok", label: "Instagram + TikTok" },
 ];
 
-const IG_TIKTOK_CHOICES = ["Instagram", "TikTok", "Either"] as const;
-
 export function GenerateTab() {
   const app = useApp();
   const d = app.data;
@@ -33,19 +31,6 @@ export function GenerateTab() {
           </button>
         ))}
       </div>
-
-      {app.genPlatformGroup === "IGTikTok" && (
-        <div style={{ marginBottom: 22 }}>
-          <div style={{ ...kicker, marginBottom: 10 }}>Instagram or TikTok</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {IG_TIKTOK_CHOICES.map((v) => (
-              <button key={v} style={chipStyle(app.genIgTiktokChoice === v)} onClick={() => app.setGenIgTiktokChoice(v)}>
-                {v}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div style={{ ...kicker, marginBottom: 10 }}>Category</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 22 }}>
