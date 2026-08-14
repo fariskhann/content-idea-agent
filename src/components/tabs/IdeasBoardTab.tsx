@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
 import { chipStyle, fieldLabel, muted, pageTitle, removeBtn } from "@/lib/styles";
 import type { Idea, IdeaStatus } from "@/lib/types";
@@ -179,6 +180,47 @@ function IdeaCard({ idea }: { idea: Idea }) {
   );
 }
 
+/** Small inline "Clear N? Yes / Cancel" control, replacing a plain trigger button while armed — avoids native window.confirm(), which this app's fully custom-themed UI otherwise never uses. */
+function ClearControl({ label, count, onConfirm, small }: { label: string; count: number; onConfirm: () => void; small?: boolean }) {
+  const [armed, setArmed] = useState(false);
+  if (!count) return null;
+  if (!armed) {
+    return (
+      <button
+        onClick={() => setArmed(true)}
+        title={`Clear ${label}`}
+        style={small
+          ? { ...removeBtn, fontSize: 11, fontWeight: 700, padding: "2px 4px" }
+          : { border: `1px solid ${muted(35)}`, background: "transparent", color: muted(70), padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+      >
+        Clear{!small ? " board" : ""}
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: small ? 11 : 12 }}>
+      <span style={{ color: muted(65) }}>
+        Clear {count}?
+      </span>
+      <button
+        onClick={() => {
+          onConfirm();
+          setArmed(false);
+        }}
+        style={{ border: "1px solid var(--color-accent)", background: "var(--color-accent)", color: "var(--color-bg)", padding: small ? "2px 6px" : "5px 10px", fontSize: small ? 11 : 12, fontWeight: 700, cursor: "pointer" }}
+      >
+        Yes
+      </button>
+      <button
+        onClick={() => setArmed(false)}
+        style={{ border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", padding: small ? "2px 6px" : "5px 10px", fontSize: small ? 11 : 12, fontWeight: 600, cursor: "pointer" }}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 export function IdeasBoardTab() {
   const app = useApp();
   const ideas = app.data.ideas.filter((i) => {
@@ -191,12 +233,15 @@ export function IdeasBoardTab() {
     <div>
       <h1 style={pageTitle}>Ideas board</h1>
       <p style={{ fontSize: 15, color: muted(65), margin: "0 0 20px" }}>{ideas.length} ideas total. Click a title to open the full card and edit anything.</p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
-        {BOARD_FILTERS.map((f) => (
-          <button key={f.value} style={chipStyle(app.activeBoardPlatform === f.value)} onClick={() => app.setActiveBoardPlatform(f.value)}>
-            {f.label}
-          </button>
-        ))}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 20 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {BOARD_FILTERS.map((f) => (
+            <button key={f.value} style={chipStyle(app.activeBoardPlatform === f.value)} onClick={() => app.setActiveBoardPlatform(f.value)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <ClearControl label="board" count={ideas.length} onConfirm={() => app.clearIdeas("all", app.activeBoardPlatform)} />
       </div>
       <div style={{ display: "flex", gap: 24, overflowX: "auto", paddingBottom: 12 }}>
         {COLUMNS.map((col) => {
@@ -205,7 +250,10 @@ export function IdeasBoardTab() {
             <div key={col.status} style={{ width: 300, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid var(--color-divider)", paddingBottom: 8 }}>
                 <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text)" }}>{col.label}</span>
-                <span style={{ fontSize: 11, color: "var(--color-neutral-800)", background: "var(--color-neutral-100)", padding: "2px 8px" }}>{items.length}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 11, color: "var(--color-neutral-800)", background: "var(--color-neutral-100)", padding: "2px 8px" }}>{items.length}</span>
+                  <ClearControl label={col.label} count={items.length} onConfirm={() => app.clearIdeas(col.status, app.activeBoardPlatform)} small />
+                </div>
               </div>
               {items.length === 0 && (
                 <div style={{ fontSize: 13, color: muted(50), padding: 18, textAlign: "center", border: "1px solid var(--color-divider)" }}>No ideas here yet</div>

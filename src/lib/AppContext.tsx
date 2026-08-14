@@ -410,6 +410,19 @@ function useAppStore() {
     [setData]
   );
   const deleteIdea = useCallback((id: string) => setData((d) => ({ ...d, ideas: d.ideas.filter((i) => i.id !== id) })), [setData]);
+  /** Clears ideas matching a status ("all" for every column) and the given board platform filter — mirrors whatever's currently visible on the board. */
+  const clearIdeas = useCallback(
+    (status: IdeaStatus | "all", platformFilter: "All" | "YouTube" | "IGTikTok") =>
+      setData((d) => ({
+        ...d,
+        ideas: d.ideas.filter((i) => {
+          const statusMatch = status === "all" || i.status === status;
+          const platformMatch = platformFilter === "All" || (platformFilter === "YouTube" ? i.platform === "YouTube" : i.platform === "Instagram" || i.platform === "TikTok");
+          return !(statusMatch && platformMatch);
+        }),
+      })),
+    [setData]
+  );
   const toggleIdeaExpand = useCallback((id: string) => setState((s) => ({ ...s, expandedIds: { ...s.expandedIds, [id]: !s.expandedIds[id] } })), []);
   const toggleCategoryExpand = useCallback(
     (id: string) => setState((s) => ({ ...s, expandedCategoryIds: { ...s.expandedCategoryIds, [id]: !s.expandedCategoryIds[id] } })),
@@ -752,6 +765,7 @@ function useAppStore() {
     updateIdea,
     setIdeaStatus,
     deleteIdea,
+    clearIdeas,
     toggleIdeaExpand,
     toggleCategoryExpand,
     openRegenPanel,
