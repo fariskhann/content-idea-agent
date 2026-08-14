@@ -3,7 +3,7 @@ import type { Provider } from "./models";
 export interface UsageLogEntry {
   id: string;
   timestamp: number;
-  feature: "generate" | "script" | "youtube-analysis";
+  feature: "generate" | "script" | "youtube-analysis" | "library-distill";
   provider: Provider;
   modelId: string;
   modelLabel: string;

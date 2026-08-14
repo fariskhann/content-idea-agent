@@ -81,6 +81,21 @@ export interface Inspiration {
   youtubeAnalysis?: YoutubeAnalysis;
 }
 
+export interface LibraryEntry {
+  id: string;
+  /** Category.id[] this learning is scoped to for prompt retrieval. Empty = unscoped/"General". */
+  categoryIds: string[];
+  platform: PlatformGroup;
+  /** The distilled, durable learning — compact and reusable, not raw analysis output. */
+  text: string;
+  sourceInspirationId: string;
+  /** Denormalized snapshot so the entry still reads sensibly if the Inspiration is later renamed or deleted. */
+  sourceInspirationName: string;
+  sourceVideoIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface AppData {
   brandName: string;
   brandOneLiner: string;
@@ -104,6 +119,7 @@ export interface AppData {
   hooks: TextItem[];
   ideas: Idea[];
   inspirations: Inspiration[];
+  library: LibraryEntry[];
 }
 
-export type TabId = "brand" | "generate" | "ideas" | "frameworks" | "inspiration";
+export type TabId = "brand" | "generate" | "ideas" | "frameworks" | "inspiration" | "library";

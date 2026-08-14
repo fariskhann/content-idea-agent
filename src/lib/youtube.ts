@@ -1,4 +1,4 @@
-import type { AppData, Category, YoutubeVideo } from "./types";
+import type { AppData, Category, YoutubeOutlierResult, YoutubeVideo } from "./types";
 import { buildVoiceAndBrandBlocks } from "./generation";
 
 export const DEFAULT_VIDEO_COUNT = 10;
@@ -95,6 +95,39 @@ export function buildYoutubeAnalysisPrompt(
     'Respond ONLY with a raw JSON array (no markdown fences, no commentary) of exactly ' +
     videos.length +
     ' objects, one per video above in the same order. Each object must have a "videoId" key (the Video ID given above) plus whatever additional keys best capture the analysis called for in the instructions above — choose short, descriptive camelCase key names yourself; do not default to "why"/"borrow" unless the instructions above actually describe that as the structure. Each additional key\'s value can be a plain string, or a JSON object with descriptive sub-keys for a multi-part breakdown.';
+
+  return prompt;
+}
+
+export interface DistillationTarget {
+  video: YoutubeVideo;
+  result: YoutubeOutlierResult;
+}
+
+/** Turns a batch of already-analysed videos into compact, durable "learning" entries for the knowledge library — distillation, not a restatement of the raw per-video analysis. */
+export function buildDistillationPrompt(
+  data: AppData,
+  creatorName: string,
+  platformCategories: Category[],
+  targets: DistillationTarget[]
+): string {
+  const { brandBlock, personalBlock } = buildVoiceAndBrandBlocks(data);
+  const categoryNames = [...platformCategories.map((c) => c.name), "General"];
+  const categoryText = platformCategories.map((c) => `- ${c.name}: ${c.desc}`).join("\n") + "\n- General: doesn't cleanly fit one content type, or applies broadly.";
+
+  let prompt = brandBlock + (personalBlock ? "\n" + personalBlock : "") + "\n";
+  prompt += `You're distilling durable, reusable lessons from analysed videos on the YouTube channel "${creatorName}" into a permanent knowledge library that will be fed into future content-idea and script generation for our own content.\n\n`;
+  prompt += `Our content types, to classify each learning against:\n${categoryText}\n\n`;
+  prompt += `Analysed videos:\n\n`;
+  targets.forEach(({ video, result }, i) => {
+    prompt += `${i + 1}. Video ID: ${video.id}\nTitle: "${video.title}"\nAnalysis: ${JSON.stringify(result.fields)}\n\n`;
+  });
+  prompt +=
+    "Extract the durable, reusable *pattern* from this analysis — something a content strategist could apply to a totally different video idea next month — not a restatement of the analysis above. Keep each learning compact (1-3 sentences). If multiple videos share the same underlying pattern, consolidate them into a single learning rather than repeating near-duplicates — the number of learnings you return does not need to match the number of videos.\n\n";
+  prompt +=
+    'Respond ONLY with a raw JSON array (no markdown fences, no commentary) of objects shaped like: {"text": the distilled learning, "categoryNames": array of one or more of [' +
+    categoryNames.map((n) => `"${n}"`).join(", ") +
+    '] that this learning applies to, "videoIds": array of Video ID(s) from above that this learning draws from}.';
 
   return prompt;
 }

@@ -132,6 +132,12 @@ export function buildAiGeneratePromptForCategory(
   prompt += "Content type: " + cat.name + " (" + cat.stage + "). " + cat.desc + "\n\n";
   if (hooksText) prompt += "Hook formulas available: " + hooksText + "\n\n";
   if (inspo) prompt += "Creators/pages they like for inspiration:\n" + inspo + "\n\n";
+  const libraryEntries = data.library
+    .filter((e) => e.categoryIds.includes(cat.id))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 8);
+  if (libraryEntries.length)
+    prompt += "Things we've learned from analysing inspiration for this content type:\n" + libraryEntries.map((e) => "- " + e.text).join("\n") + "\n\n";
   if (existing) prompt += "Ideas already logged (avoid repeating):\n" + existing + "\n\n";
   if (context) prompt += "Context from the user right now: " + context + "\n\n";
   prompt += "Generate exactly " + slots.length + " distinct video ideas, one for each numbered slot below, IN ORDER (do not skip, merge, or reorder):\n";
@@ -166,6 +172,12 @@ export function buildAiGeneratePromptGeneric(
           return a.name + (struct ? " [structure: " + struct + "]" : "");
         })
         .join("; ");
+      const libText = data.library
+        .filter((e) => e.categoryIds.includes(c.id))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, 5)
+        .map((e) => e.text)
+        .join(" | ");
       return (
         c.name +
         " (" +
@@ -177,7 +189,8 @@ export function buildAiGeneratePromptGeneric(
         ": " +
         c.desc +
         " Formats: " +
-        angleLines
+        angleLines +
+        (libText ? " Learnings: " + libText : "")
       );
     })
     .join("\n");
@@ -232,7 +245,14 @@ export function buildScriptPrompt(data: AppData, idea: Idea, cat: Category | und
     (data.brandOneLiner ? " — " + data.brandOneLiner : "") +
     ".\n\n";
   prompt += "Idea title: " + (idea.title || "Untitled") + "\n";
-  if (cat) prompt += "Content type: " + cat.name + " (" + cat.stage + ")\n";
+  if (cat) {
+    prompt += "Content type: " + cat.name + " (" + cat.stage + ")\n";
+    const libraryEntries = data.library
+      .filter((e) => e.categoryIds.includes(cat.id))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 6);
+    if (libraryEntries.length) prompt += "Things we've learned works for this content type:\n" + libraryEntries.map((e) => "- " + e.text).join("\n") + "\n";
+  }
   if (idea.platform && idea.platform !== "Any") prompt += "Platform: " + idea.platform + "\n";
   if (idea.hook) prompt += "Hook / opening line: " + idea.hook + "\n";
   if (idea.notes) prompt += "Notes / structure to follow: " + idea.notes + "\n";

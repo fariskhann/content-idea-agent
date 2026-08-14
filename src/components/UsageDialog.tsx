@@ -10,6 +10,7 @@ const FEATURE_LABEL: Record<string, string> = {
   generate: "Generate",
   script: "Script",
   "youtube-analysis": "YouTube analysis",
+  "library-distill": "Library distill",
 };
 
 export function UsageDialog() {

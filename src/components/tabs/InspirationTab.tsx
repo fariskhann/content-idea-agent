@@ -6,8 +6,9 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { muted, pageSubtitle, pageTitle, primaryBtn, removeBtn } from "@/lib/styles";
 import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
-import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt } from "@/lib/youtube";
-import type { AnalysisField as AnalysisFieldType, Category, Inspiration, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
+import { genId } from "@/lib/id";
+import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt, buildDistillationPrompt } from "@/lib/youtube";
+import type { AnalysisField as AnalysisFieldType, Category, Inspiration, LibraryEntry, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
 
 function platformLabel(p: Inspiration["platform"]): string {
   return p === "YouTube" ? "YouTube" : "IG + TikTok";
@@ -45,6 +46,7 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
   const [count, setCount] = useState(DEFAULT_VIDEO_COUNT);
   const [fetching, setFetching] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [distilling, setDistilling] = useState(false);
   const [error, setError] = useState("");
   const [expandedTranscriptIds, setExpandedTranscriptIds] = useState<Set<string>>(new Set());
   const [minimizedOverrides, setMinimizedOverrides] = useState<Record<string, boolean>>({});
@@ -226,6 +228,71 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
     setError("");
   }
 
+  const selectedAnalysedVideos = videos.filter((v) => selectedIds.has(v.id) && analysisById.has(v.id));
+
+  /** Distills the selected, already-analysed videos into durable library entries — a separate, opt-in AI call, never run automatically after Analyse. */
+  async function handleAddToLibrary() {
+    setError("");
+    if (!selectedAnalysedVideos.length) return;
+    const selectedModel = getModel(app.data.aiModel);
+    const hasKey = selectedModel.provider === "anthropic" ? !!app.settings.anthropicApiKey : !!app.settings.deepseekApiKey;
+    if (!hasKey) {
+      setError(`Add your ${providerLabel(selectedModel.provider)} API key in Settings first.`);
+      return;
+    }
+    setDistilling(true);
+    try {
+      const platformCategories = app.data.categories.filter((c) => c.platform === insp.platform);
+      const targets = selectedAnalysedVideos.map((video) => ({ video, result: analysisById.get(video.id)! }));
+      const prompt = buildDistillationPrompt(app.data, insp.name || insp.handle, platformCategories, targets);
+      const model = getModel(app.data.aiModel);
+      const { text, usage } = await complete({
+        model,
+        apiKeys: { anthropicApiKey: app.settings.anthropicApiKey, deepseekApiKey: app.settings.deepseekApiKey },
+        prompt,
+        maxTokens: Math.min(8000, 1000 + targets.length * 400),
+      });
+      app.logUsage({
+        feature: "library-distill",
+        provider: model.provider,
+        modelId: model.id,
+        modelLabel: model.label,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+      });
+      const parsed = parseJsonArray(text) as Record<string, unknown>[] | null;
+      if (!parsed || !parsed.length) throw new Error("Unexpected response format — try again.");
+      const newEntries: LibraryEntry[] = parsed
+        .map((p) => {
+          const names = Array.isArray(p.categoryNames) ? (p.categoryNames as unknown[]) : [];
+          const categoryIds = names
+            .map((n) => platformCategories.find((c) => c.name.trim().toLowerCase() === String(n).trim().toLowerCase())?.id)
+            .filter((id): id is string => !!id);
+          const videoIds = Array.isArray(p.videoIds) ? (p.videoIds as unknown[]).filter((v): v is string => typeof v === "string") : [];
+          const now = Date.now();
+          return {
+            id: genId(),
+            categoryIds,
+            platform: insp.platform,
+            text: String(p.text || "").trim(),
+            sourceInspirationId: insp.id,
+            sourceInspirationName: insp.name || insp.handle,
+            sourceVideoIds: videoIds,
+            createdAt: now,
+            updatedAt: now,
+          };
+        })
+        .filter((e) => e.text);
+      if (!newEntries.length) throw new Error("The model didn't return any usable learnings — try again.");
+      app.addLibraryEntries(newEntries);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Adding to library failed — try again.");
+    } finally {
+      setDistilling(false);
+    }
+  }
+
   return (
     <div style={{ borderTop: `1px solid ${muted(25)}`, marginTop: 8, paddingTop: 18, display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>
@@ -257,6 +324,16 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
             style={{ border: "1px solid var(--color-accent)", background: "var(--color-accent)", color: "var(--color-bg)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
           >
             {analyzing ? "Analysing…" : `Analyse videos (${selectedIds.size})`}
+          </button>
+        )}
+        {videos.length > 0 && (
+          <button
+            onClick={handleAddToLibrary}
+            disabled={distilling || selectedAnalysedVideos.length === 0}
+            title="Distills the selected, already-analysed videos into durable library entries — a separate AI call, not run automatically after Analyse."
+            style={{ border: `1px solid ${muted(35)}`, background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            {distilling ? "Adding…" : `Add to library (${selectedAnalysedVideos.length})`}
           </button>
         )}
         {videos.length > 0 && (

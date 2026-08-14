@@ -12,6 +12,7 @@ const TABS: { id: TabId; label: string; short: string; count?: (n: ReturnType<ty
   { id: "ideas", label: "Ideas board", short: "Id", count: (app) => app.data.ideas.length },
   { id: "frameworks", label: "Frameworks", short: "Fr" },
   { id: "inspiration", label: "Inspiration", short: "In", count: (app) => app.data.inspirations.length },
+  { id: "library", label: "Library", short: "Li", count: (app) => app.data.library.length },
 ];
 
 const COLLAPSED_KEY = "cia_sidebar_collapsed_v1";

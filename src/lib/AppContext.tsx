@@ -23,6 +23,7 @@ import type {
   Idea,
   IdeaStatus,
   Inspiration,
+  LibraryEntry,
   Platform,
   PlatformGroup,
   TabId,
@@ -699,6 +700,21 @@ function useAppStore() {
     });
   }, []);
 
+  // ---- knowledge library ----
+  const addLibraryEntries = useCallback(
+    (entries: LibraryEntry[]) => setData((d) => ({ ...d, library: [...entries, ...d.library] })),
+    [setData]
+  );
+  const updateLibraryEntryText = useCallback(
+    (id: string, text: string) =>
+      setData((d) => ({ ...d, library: d.library.map((e) => (e.id === id ? { ...e, text, updatedAt: Date.now() } : e)) })),
+    [setData]
+  );
+  const removeLibraryEntry = useCallback(
+    (id: string) => setData((d) => ({ ...d, library: d.library.filter((e) => e.id !== id) })),
+    [setData]
+  );
+
   // ---- youtube inspiration ----
   const updateInspirationYoutube = useCallback(
     (id: string, patch: Partial<Inspiration>) =>
@@ -763,6 +779,9 @@ function useAppStore() {
     updateSettings,
     setSettingsOpen,
     swapSupadataKeys,
+    addLibraryEntries,
+    updateLibraryEntryText,
+    removeLibraryEntry,
     updateInspirationYoutube,
     logUsage,
     clearUsage,

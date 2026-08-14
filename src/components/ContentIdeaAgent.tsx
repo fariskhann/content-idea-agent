@@ -8,6 +8,7 @@ import { GenerateTab } from "@/components/tabs/GenerateTab";
 import { IdeasBoardTab } from "@/components/tabs/IdeasBoardTab";
 import { FrameworksTab } from "@/components/tabs/FrameworksTab";
 import { InspirationTab } from "@/components/tabs/InspirationTab";
+import { LibraryTab } from "@/components/tabs/LibraryTab";
 import { useApp } from "@/lib/AppContext";
 
 export function ContentIdeaAgent() {
@@ -24,6 +25,7 @@ export function ContentIdeaAgent() {
         {app.activeTab === "ideas" && <IdeasBoardTab />}
         {app.activeTab === "frameworks" && <FrameworksTab />}
         {app.activeTab === "inspiration" && <InspirationTab />}
+        {app.activeTab === "library" && <LibraryTab />}
       </main>
       <SettingsDialog />
       <UsageDialog />

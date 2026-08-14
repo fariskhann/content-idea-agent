@@ -152,5 +152,6 @@ export function defaultSeed(): AppData {
         notes: "",
       },
     ],
+    library: [],
   };
 }
