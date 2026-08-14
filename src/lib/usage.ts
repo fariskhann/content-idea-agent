@@ -13,8 +13,8 @@ export interface UsageLogEntry {
 }
 
 const STORAGE_KEY = "cia_usage_v1";
-const MAX_ENTRIES = 500;
 
+/** Reads the legacy localStorage copy — used only for the one-time migration into Supabase (see AppContext.tsx). */
 export function loadUsageLog(): UsageLogEntry[] {
   if (typeof window === "undefined") return [];
   try {
@@ -24,14 +24,6 @@ export function loadUsageLog(): UsageLogEntry[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
-  }
-}
-
-export function saveUsageLog(log: UsageLogEntry[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(log.slice(0, MAX_ENTRIES)));
-  } catch {
-    // ignore quota errors
   }
 }
 

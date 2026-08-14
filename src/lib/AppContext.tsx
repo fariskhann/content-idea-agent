@@ -1,9 +1,9 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { genId } from "./id";
 import { defaultSeed } from "./seed";
-import { loadSettings, saveSettings, type Settings } from "./settings";
+import { loadSettings, type Settings } from "./settings";
 import {
   buildAiGeneratePromptForCategory,
   buildAiGeneratePromptGeneric,
@@ -13,8 +13,10 @@ import {
 } from "./generation";
 import { complete, parseJsonArray } from "./ai";
 import { getModel, costUsd } from "./models";
-import { loadUsageLog, saveUsageLog, type UsageLogEntry } from "./usage";
-import { loadTranscriptLog, saveTranscriptLog, loadTranscriptBackupLog, saveTranscriptBackupLog } from "./transcriptUsage";
+import { loadUsageLog, type UsageLogEntry } from "./usage";
+import { loadTranscriptLog, loadTranscriptBackupLog } from "./transcriptUsage";
+import { supabase } from "./supabaseClient";
+import { fetchUserRow, insertUserRow, updateAppData, updateSettingsRow, updateUsageLog, updateTranscriptLogs, type UserDataRow } from "./db";
 import type {
   AppData,
   Category,
@@ -103,41 +105,135 @@ const AppCtx = createContext<Ctx | null>(null);
 function useAppStore() {
   const [state, setState] = useState<AppState>(initialAppState);
   const [hydrated, setHydrated] = useState(false);
+  const userIdRef = useRef<string | null>(null);
 
-  // Load persisted data + settings once on mount (browser only).
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (saved && Array.isArray(saved.categories)) {
-          // Backfill categories persisted before Category.platform existed — non-destructive, idempotent.
-          saved.categories = saved.categories.map((c: Category) => ({
-            ...c,
-            platform: c.platform === "YouTube" || c.platform === "IGTikTok" ? c.platform : "YouTube",
-          }));
-          setState((s) => ({ ...s, data: { ...s.data, ...saved } }));
-        }
-      }
-    } catch {
-      // ignore corrupt storage
-    }
-    setState((s) => ({
-      ...s,
-      settings: loadSettings(),
-      usageLog: loadUsageLog(),
-      transcriptLog: loadTranscriptLog(),
-      transcriptBackupLog: loadTranscriptBackupLog(),
-    }));
-    setHydrated(true);
-  }, []);
+  // Debounced app_data / settings writes to Supabase — mutation callbacks fire on every keystroke,
+  // so writing straight through on every call would hammer the network. usage/transcript logs are
+  // event-driven (one write per AI call / transcript fetch / button click), so they write immediately.
+  const appDataTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingAppDataRef = useRef<AppData | null>(null);
+  const settingsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSettingsRef = useRef<Settings | null>(null);
 
   const persist = useCallback((data: AppData) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // ignore quota errors
-    }
+    if (!userIdRef.current) return;
+    pendingAppDataRef.current = data;
+    if (appDataTimerRef.current) clearTimeout(appDataTimerRef.current);
+    appDataTimerRef.current = setTimeout(() => {
+      appDataTimerRef.current = null;
+      const toSave = pendingAppDataRef.current;
+      pendingAppDataRef.current = null;
+      if (toSave && userIdRef.current) updateAppData(userIdRef.current, toSave).catch(() => {});
+    }, 800);
+  }, []);
+
+  const persistSettings = useCallback((settings: Settings) => {
+    if (!userIdRef.current) return;
+    pendingSettingsRef.current = settings;
+    if (settingsTimerRef.current) clearTimeout(settingsTimerRef.current);
+    settingsTimerRef.current = setTimeout(() => {
+      settingsTimerRef.current = null;
+      const toSave = pendingSettingsRef.current;
+      pendingSettingsRef.current = null;
+      if (toSave && userIdRef.current) updateSettingsRow(userIdRef.current, toSave).catch(() => {});
+    }, 800);
+  }, []);
+
+  // Flush any pending debounced writes immediately when the tab is hidden/closed, so a stray
+  // 800ms window doesn't lose the last edit.
+  useEffect(() => {
+    const flush = () => {
+      if (appDataTimerRef.current) {
+        clearTimeout(appDataTimerRef.current);
+        appDataTimerRef.current = null;
+        if (pendingAppDataRef.current && userIdRef.current) updateAppData(userIdRef.current, pendingAppDataRef.current).catch(() => {});
+        pendingAppDataRef.current = null;
+      }
+      if (settingsTimerRef.current) {
+        clearTimeout(settingsTimerRef.current);
+        settingsTimerRef.current = null;
+        if (pendingSettingsRef.current && userIdRef.current) updateSettingsRow(userIdRef.current, pendingSettingsRef.current).catch(() => {});
+        pendingSettingsRef.current = null;
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) flush();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, []);
+
+  // Load the signed-in user's row from Supabase once on mount (AppProvider only ever mounts once
+  // AuthGate has confirmed a session). On first-ever load with no row yet, migrate whatever's in
+  // this browser's localStorage (if any) into the database, then use that as the initial row.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      userIdRef.current = user.id;
+
+      let row: UserDataRow | null;
+      try {
+        row = await fetchUserRow(user.id);
+      } catch {
+        if (!cancelled) setState((s) => ({ ...s, genError: "Failed to load your data — check your connection and reload." }));
+        return;
+      }
+
+      if (!row) {
+        let legacyAppData: AppData | null = null;
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved && Array.isArray(saved.categories)) {
+              // Backfill categories persisted before Category.platform existed — non-destructive, idempotent.
+              saved.categories = saved.categories.map((c: Category) => ({
+                ...c,
+                platform: c.platform === "YouTube" || c.platform === "IGTikTok" ? c.platform : "YouTube",
+              }));
+              legacyAppData = saved;
+            }
+          }
+        } catch {
+          // ignore corrupt storage
+        }
+        row = {
+          app_data: legacyAppData ? { ...defaultSeed(), ...legacyAppData } : defaultSeed(),
+          settings: loadSettings(),
+          usage_log: loadUsageLog(),
+          transcript_log: loadTranscriptLog(),
+          transcript_backup_log: loadTranscriptBackupLog(),
+        };
+        try {
+          await insertUserRow(user.id, row);
+        } catch {
+          if (!cancelled) setState((s) => ({ ...s, genError: "Failed to save your migrated data — check your connection and reload." }));
+          return;
+        }
+      }
+
+      if (cancelled) return;
+      setState((s) => ({
+        ...s,
+        data: { ...s.data, ...row!.app_data },
+        settings: row!.settings,
+        usageLog: row!.usage_log,
+        transcriptLog: row!.transcript_log,
+        transcriptBackupLog: row!.transcript_backup_log,
+      }));
+      setHydrated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const setData = useCallback(
@@ -340,13 +436,13 @@ function useAppStore() {
   const logUsage = useCallback((entry: Omit<UsageLogEntry, "id" | "timestamp">) => {
     setState((s) => {
       const usageLog = [{ ...entry, id: genId(), timestamp: Date.now() }, ...s.usageLog].slice(0, 500);
-      saveUsageLog(usageLog);
+      if (userIdRef.current) updateUsageLog(userIdRef.current, usageLog).catch(() => {});
       return { ...s, usageLog };
     });
   }, []);
   const clearUsage = useCallback(() => {
     setState((s) => {
-      saveUsageLog([]);
+      if (userIdRef.current) updateUsageLog(userIdRef.current, []).catch(() => {});
       return { ...s, usageLog: [] };
     });
   }, []);
@@ -356,7 +452,7 @@ function useAppStore() {
   const logTranscriptFetch = useCallback(() => {
     setState((s) => {
       const transcriptLog = [...s.transcriptLog, Date.now()].slice(-1000);
-      saveTranscriptLog(transcriptLog);
+      if (userIdRef.current) updateTranscriptLogs(userIdRef.current, transcriptLog, s.transcriptBackupLog).catch(() => {});
       return { ...s, transcriptLog };
     });
   }, []);
@@ -563,14 +659,20 @@ function useAppStore() {
       if (patch.supadataBackupApiKey && !s.settings.supadataBackupApiKey && !settings.supadataBackupResetDay) {
         settings.supadataBackupResetDay = Math.min(new Date().getDate(), 28);
       }
-      saveSettings(settings);
+      persistSettings(settings);
       return { ...s, settings };
     });
-  }, []);
+  }, [persistSettings]);
   const setSettingsOpen = useCallback((open: boolean) => setState((s) => ({ ...s, settingsOpen: open })), []);
 
   /** Swaps the primary and backup Supadata keys, along with their reset-day settings and usage logs — the log always stays attached to its actual key, and only the primary key is ever used for calls. */
   const swapSupadataKeys = useCallback(() => {
+    // Cancel any pending debounced settings write so it can't clobber this swap moments later.
+    if (settingsTimerRef.current) {
+      clearTimeout(settingsTimerRef.current);
+      settingsTimerRef.current = null;
+      pendingSettingsRef.current = null;
+    }
     setState((s) => {
       const settings: Settings = {
         ...s.settings,
@@ -579,11 +681,12 @@ function useAppStore() {
         supadataResetDay: s.settings.supadataBackupResetDay,
         supadataBackupResetDay: s.settings.supadataResetDay,
       };
-      saveSettings(settings);
       const transcriptLog = s.transcriptBackupLog;
       const transcriptBackupLog = s.transcriptLog;
-      saveTranscriptLog(transcriptLog);
-      saveTranscriptBackupLog(transcriptBackupLog);
+      if (userIdRef.current) {
+        updateSettingsRow(userIdRef.current, settings).catch(() => {});
+        updateTranscriptLogs(userIdRef.current, transcriptLog, transcriptBackupLog).catch(() => {});
+      }
       return { ...s, settings, transcriptLog, transcriptBackupLog };
     });
   }, []);

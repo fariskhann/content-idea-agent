@@ -25,6 +25,7 @@ const empty: Settings = {
   supadataBackupResetDay: 0,
 };
 
+/** Reads the legacy localStorage copy — used only for the one-time migration into Supabase (see AppContext.tsx). */
 export function loadSettings(): Settings {
   if (typeof window === "undefined") return empty;
   try {
@@ -34,13 +35,5 @@ export function loadSettings(): Settings {
     return { ...empty, ...parsed };
   } catch {
     return empty;
-  }
-}
-
-export function saveSettings(settings: Settings) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(settings));
-  } catch {
-    // ignore
   }
 }
