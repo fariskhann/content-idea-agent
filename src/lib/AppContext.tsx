@@ -30,6 +30,21 @@ import type {
 
 const STORAGE_KEY = "cia_v1";
 
+/** Backfills Category.platform / Inspiration.platform for data saved before those fields existed (or before Inspiration.platform was narrowed to just YouTube/IGTikTok) — non-destructive, idempotent. Run on every load, not just migration, since already-migrated DB rows can predate this. */
+function normalizePlatformGroups(data: AppData): AppData {
+  return {
+    ...data,
+    categories: (data.categories || []).map((c) => ({
+      ...c,
+      platform: c.platform === "YouTube" || c.platform === "IGTikTok" ? c.platform : "YouTube",
+    })),
+    inspirations: (data.inspirations || []).map((i) => ({
+      ...i,
+      platform: i.platform === "YouTube" || i.platform === "IGTikTok" ? i.platform : "IGTikTok",
+    })),
+  };
+}
+
 interface AiGenParsedItem {
   title?: string;
   hook?: string;
@@ -193,14 +208,7 @@ function useAppStore() {
           const raw = localStorage.getItem(STORAGE_KEY);
           if (raw) {
             const saved = JSON.parse(raw);
-            if (saved && Array.isArray(saved.categories)) {
-              // Backfill categories persisted before Category.platform existed — non-destructive, idempotent.
-              saved.categories = saved.categories.map((c: Category) => ({
-                ...c,
-                platform: c.platform === "YouTube" || c.platform === "IGTikTok" ? c.platform : "YouTube",
-              }));
-              legacyAppData = saved;
-            }
+            if (saved && Array.isArray(saved.categories)) legacyAppData = saved;
           }
         } catch {
           // ignore corrupt storage
@@ -223,7 +231,7 @@ function useAppStore() {
       if (cancelled) return;
       setState((s) => ({
         ...s,
-        data: { ...s.data, ...row!.app_data },
+        data: { ...s.data, ...normalizePlatformGroups(row!.app_data) },
         settings: row!.settings,
         usageLog: row!.usage_log,
         transcriptLog: row!.transcript_log,
@@ -347,7 +355,7 @@ function useAppStore() {
     const id = genId();
     setData((d) => ({
       ...d,
-      inspirations: [{ id, name: "", handle: "", platform: "Instagram", link: "", tags: [], notes: "" }, ...d.inspirations],
+      inspirations: [{ id, name: "", handle: "", platform: "YouTube", link: "", tags: [], notes: "" }, ...d.inspirations],
     }));
     return id;
   }, [setData]);

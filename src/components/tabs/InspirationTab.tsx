@@ -9,6 +9,10 @@ import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt } from "@/lib/youtube";
 import type { AnalysisField as AnalysisFieldType, Category, Inspiration, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
 
+function platformLabel(p: Inspiration["platform"]): string {
+  return p === "YouTube" ? "YouTube" : "IG + TikTok";
+}
+
 function fmtViews(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
   if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
@@ -440,10 +444,8 @@ function InspirationDetail({ insp }: { insp: Inspiration }) {
           onChange={(e) => app.updateInspiration(insp.id, "platform", e.target.value as Inspiration["platform"])}
           style={{ border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 13, color: "var(--color-text)", padding: "8px 10px" }}
         >
-          <option value="Instagram">Instagram</option>
-          <option value="TikTok">TikTok</option>
           <option value="YouTube">YouTube</option>
-          <option value="Other">Other</option>
+          <option value="IGTikTok">IG + TikTok</option>
         </select>
         <input
           value={insp.link}
@@ -459,14 +461,16 @@ function InspirationDetail({ insp }: { insp: Inspiration }) {
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {app.data.categories.map((c) => {
-          const active = insp.tags.includes(c.id);
-          return (
-            <button key={c.id} style={chipStyle(active)} onClick={() => app.toggleInspirationTag(insp.id, c.id)}>
-              {c.name}
-            </button>
-          );
-        })}
+        {app.data.categories
+          .filter((c) => c.platform === insp.platform)
+          .map((c) => {
+            const active = insp.tags.includes(c.id);
+            return (
+              <button key={c.id} style={chipStyle(active)} onClick={() => app.toggleInspirationTag(insp.id, c.id)}>
+                {c.name}
+              </button>
+            );
+          })}
       </div>
 
       {insp.platform === "YouTube" && (
@@ -542,7 +546,7 @@ export function InspirationTab() {
                     }}
                   >
                     <span>{insp.name || insp.handle || "Untitled"}</span>
-                    <span style={{ fontSize: 10, color: muted(50), fontWeight: 400 }}>{insp.platform}</span>
+                    <span style={{ fontSize: 10, color: muted(50), fontWeight: 400 }}>{platformLabel(insp.platform)}</span>
                   </button>
                   <button onClick={() => handleRemove(insp.id)} style={{ ...removeBtn, fontSize: 14, flexShrink: 0 }}>
                     ×

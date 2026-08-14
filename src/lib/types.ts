@@ -72,7 +72,7 @@ export interface Inspiration {
   id: string;
   name: string;
   handle: string;
-  platform: "Instagram" | "TikTok" | "YouTube" | "Other";
+  platform: PlatformGroup;
   link: string;
   tags: string[];
   notes: string;
