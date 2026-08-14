@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { chipStyle, muted, pageSubtitle, pageTitle, primaryBtn, removeBtn } from "@/lib/styles";
+import { muted, pageSubtitle, pageTitle, primaryBtn, removeBtn } from "@/lib/styles";
 import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt } from "@/lib/youtube";
@@ -458,19 +458,6 @@ function InspirationDetail({ insp }: { insp: Inspiration }) {
             Open ↗
           </a>
         )}
-      </div>
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {app.data.categories
-          .filter((c) => c.platform === insp.platform)
-          .map((c) => {
-            const active = insp.tags.includes(c.id);
-            return (
-              <button key={c.id} style={chipStyle(active)} onClick={() => app.toggleInspirationTag(insp.id, c.id)}>
-                {c.name}
-              </button>
-            );
-          })}
       </div>
 
       {insp.platform === "YouTube" && (
