@@ -493,6 +493,7 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
   const app = useApp();
   const [count, setCount] = useState(DEFAULT_VIDEO_COUNT);
   const [fetching, setFetching] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
 
   const videos: SocialVideo[] = (platform === "TikTok" ? insp.tiktokVideos : insp.instagramVideos) || [];
@@ -511,6 +512,12 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
       return;
     }
     setFetching(true);
+    setElapsedSeconds(0);
+    // How long a fetch takes depends on the account's content mix (the scraper has to check every post to
+    // find the ones that are actually videos), not just how many results were requested — this counter is
+    // just so a 1-2 minute wait reads as "still working," not "stuck."
+    const startedAt = Date.now();
+    const tick = setInterval(() => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000);
     try {
       const fetchFn = platform === "TikTok" ? fetchTikTokVideos : fetchInstagramVideos;
       const res = await fetchFn({ apiKey: app.settings.apifyApiKey, ref, maxResults: count });
@@ -532,6 +539,7 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to fetch ${platform} videos.`);
     } finally {
+      clearInterval(tick);
       setFetching(false);
     }
   }
@@ -556,9 +564,15 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
           disabled={fetching}
           style={{ border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
         >
-          {fetching ? "Fetching…" : videos.length ? "Refresh videos" : "Fetch videos"}
+          {fetching ? `Fetching… (${elapsedSeconds}s)` : videos.length ? "Refresh videos" : "Fetch videos"}
         </button>
       </div>
+
+      {fetching && (
+        <div style={{ fontSize: 11, color: muted(55) }}>
+          This can take a couple of minutes, especially for accounts with a lot of non-{platform === "TikTok" ? "video" : "reel"} content — hang tight.
+        </div>
+      )}
 
       {error && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{error}</div>}
 

@@ -3,6 +3,12 @@ import { parseProfileHandle } from "@/lib/socialHandle";
 import type { SocialVideo } from "@/lib/types";
 
 export const runtime = "nodejs";
+// Apify's run-sync-get-dataset-items call blocks for the whole scrape — observed up to ~2 minutes on a
+// mixed-content profile (the scraper has to check every post to find the ones that are actually videos,
+// so duration scales with the account's content mix, not just how many results were requested). 300s is
+// Vercel Fluid Compute's Hobby-tier ceiling (default since Apr 2025) — set explicitly so it's a deliberate
+// choice, not an implicit default that could change.
+export const maxDuration = 300;
 
 const ACTOR_ID = "clockworks~tiktok-scraper";
 
