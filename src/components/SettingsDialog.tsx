@@ -164,8 +164,9 @@ export function SettingsDialog() {
         <div>
           <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>Settings</h2>
           <p style={{ fontSize: 13, color: muted(60), margin: 0 }}>
-            Stored only in this browser&apos;s local storage. Anthropic and YouTube calls go straight from your browser; DeepSeek and Supadata calls route
-            through this app&apos;s own server (their APIs don&apos;t support direct browser requests) but the key never touches anywhere else.
+            Synced to your account, so these carry over across devices. Anthropic and YouTube calls go straight from your browser (so those keys are
+            visible in that request); DeepSeek and Supadata calls route through this app&apos;s own server instead, since their APIs don&apos;t support
+            direct browser requests.
           </p>
         </div>
 
