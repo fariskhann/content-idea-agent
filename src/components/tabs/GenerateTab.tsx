@@ -43,7 +43,25 @@ export function GenerateTab() {
         ))}
       </div>
 
-      {activeCat && (
+      <div style={{ marginBottom: 22 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--color-text)", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={app.genSmartMode}
+            onChange={(e) => app.setGenSmartMode(e.target.checked)}
+            style={{ accentColor: "var(--color-accent)", width: 15, height: 15 }}
+          />
+          Let AI pick formats &amp; structures
+        </label>
+      </div>
+
+      {activeCat && app.genSmartMode && (
+        <div style={{ marginBottom: 24, fontSize: 13, color: muted(60) }}>
+          The AI will choose the best-fitting format and structure for each idea from {activeCat.name}&apos;s available options.
+        </div>
+      )}
+
+      {activeCat && !app.genSmartMode && (
         <div style={{ marginBottom: 24 }}>
           <div style={{ ...kicker, marginBottom: 10 }}>Formats to include</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 18 }}>
@@ -80,19 +98,30 @@ export function GenerateTab() {
         </div>
       )}
 
-      <div style={{ ...kicker, marginBottom: 10 }}>Context (optional)</div>
+      <div style={{ ...kicker, marginBottom: 10 }}>Context {app.genSmartMode ? "(required)" : "(optional)"}</div>
       <textarea
         value={app.genContext}
         onChange={(e) => app.setGenContext(e.target.value)}
         placeholder="What happened today, a comment someone made, a decision you're wrestling with..."
         rows={3}
-        style={{ ...textarea, marginBottom: 22 }}
+        style={{ ...textarea, marginBottom: app.genSmartMode && !app.genContext.trim() ? 8 : 22 }}
       />
+      {app.genSmartMode && !app.genContext.trim() && (
+        <div style={{ marginBottom: 22, fontSize: 12, color: "var(--color-accent-700)" }}>
+          Add a bit of context — rough is fine — so the AI can pick the right fit.
+        </div>
+      )}
 
       <div style={{ marginBottom: 24 }}>
         <div style={{ ...kicker, marginBottom: 10 }}>
-          Rounds to generate: {d.genBatchSize}{" "}
-          <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: muted(50) }}>× formats × structures</span>
+          {app.genSmartMode ? (
+            <>Up to {d.genBatchSize} ideas</>
+          ) : (
+            <>
+              Rounds to generate: {d.genBatchSize}{" "}
+              <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: muted(50) }}>× formats × structures</span>
+            </>
+          )}
         </div>
         <input
           type="range"
@@ -106,7 +135,7 @@ export function GenerateTab() {
       </div>
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <button style={primaryBtn} onClick={app.aiGenerate} disabled={app.generating}>
+        <button style={primaryBtn} onClick={app.aiGenerate} disabled={app.generating || (app.genSmartMode && !app.genContext.trim())}>
           {app.generating ? "Generating…" : "Generate with AI"}
         </button>
       </div>
@@ -131,10 +160,27 @@ export function GenerateTab() {
             gap: 12,
           }}
         >
-          <span>New idea(s) added to the board.</span>
-          <button onClick={app.goToBoard} style={{ border: "none", background: "transparent", color: "var(--color-accent-700)", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>
-            View board →
-          </button>
+          {app.genSmartSummary ? (
+            app.genSmartSummary.generated > 0 ? (
+              <>
+                <span>
+                  Generated {app.genSmartSummary.generated} of up to {app.genSmartSummary.max} ideas — added to the board.
+                </span>
+                <button onClick={app.goToBoard} style={{ border: "none", background: "transparent", color: "var(--color-accent-700)", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>
+                  View board →
+                </button>
+              </>
+            ) : (
+              <span>Couldn&apos;t find a strong fit for this context — try adding more detail, or a different category.</span>
+            )
+          ) : (
+            <>
+              <span>New idea(s) added to the board.</span>
+              <button onClick={app.goToBoard} style={{ border: "none", background: "transparent", color: "var(--color-accent-700)", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>
+                View board →
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -1,5 +1,9 @@
 import type { AppData, Angle, Category, Idea, TextItem } from "./types";
 
+/** Library candidate caps for "smart" (AI-picks-format) generation — noticeably wider than the rigid-mode caps below, since the model is trusted to select relevance itself rather than being handed a pre-filtered top-N. */
+const SMART_SINGLE_LIBRARY_CAP = 18;
+const SMART_MULTI_LIBRARY_CAP_PER_CAT = 8;
+
 export interface GenerationPools {
   angles: Angle[];
   structures: TextItem[];
@@ -112,6 +116,62 @@ export function buildAiGeneratePromptForCategory(
   return { prompt, slots };
 }
 
+/** Like buildAiGeneratePromptForCategory, but the AI picks its own format+structure fit per idea instead of being assigned one mechanically, draws on a wider pool of library learnings (using its own judgement on relevance), and returns as many well-fitting ideas as the context supports rather than a fixed count. */
+export function buildSmartAiGeneratePromptForCategory(data: AppData, cat: Category, platform: string, context: string, maxCount: number): string {
+  const hooksText = data.hooks.map((h) => h.text).join(", ");
+  const existing = data.ideas
+    .slice(0, 10)
+    .map((i) => i.title)
+    .filter(Boolean)
+    .join("; ");
+  const inspo = data.inspirations
+    .filter((i) => i.name)
+    .map((p) => p.name + " (" + p.platform + ")" + (p.notes ? " — " + p.notes : ""))
+    .join("\n");
+  const { brandBlock, personalBlock } = buildVoiceAndBrandBlocks(data);
+
+  const ownerLine =
+    cat.owner === "personal"
+      ? "Write in the personal voice of " + (data.personalName || "the creator") + (data.personalVoice ? " — voice: " + data.personalVoice : "")
+      : `Write in the "${data.brandName}" brand voice` + (data.brandVoice ? " — voice: " + data.brandVoice : "");
+
+  let prompt = brandBlock + (personalBlock ? "\n" + personalBlock : "") + "\n" + ownerLine + ".\n\n";
+  prompt += "Content type: " + cat.name + " (" + cat.stage + "). " + cat.desc + "\n\n";
+  if (hooksText) prompt += "Hook formulas available: " + hooksText + "\n\n";
+  if (inspo) prompt += "Creators/pages they like for inspiration:\n" + inspo + "\n\n";
+  const libraryEntries = data.library
+    .filter((e) => e.categoryIds.includes(cat.id))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, SMART_SINGLE_LIBRARY_CAP);
+  if (libraryEntries.length)
+    prompt +=
+      "Things we've learned from analysing inspiration for this content type (use only what's genuinely relevant to this specific idea — it's completely fine to use none of these, don't force a tenuous connection just to reference one):\n" +
+      libraryEntries.map((e) => "- " + e.text).join("\n") +
+      "\n\n";
+  if (existing) prompt += "Ideas already logged (avoid repeating):\n" + existing + "\n\n";
+  prompt += "Context from the user right now: " + context + "\n\n";
+
+  prompt += "Available formats for this content type (pick whichever genuinely fits each idea):\n";
+  prompt += cat.angles.map((a) => '- "' + a.name + '"' + (a.structure ? " — structure hint: " + a.structure : "")).join("\n") + "\n";
+  if (cat.structures.length) {
+    prompt += "Available structures:\n";
+    prompt += cat.structures.map((st) => "- " + st.text).join("\n") + "\n";
+  }
+  prompt += "\n";
+
+  prompt +=
+    "Pick whichever format (and structure, if any apply) genuinely suits each idea — different ideas may use different formats if that's a better fit, but don't force variety for its own sake; it's fine for several ideas to share the same format if that's what actually fits the context. " +
+    "Only generate as many genuinely distinct, well-fitting ideas as this context actually supports, up to " +
+    maxCount +
+    " — do not pad to reach that number. If nothing here fits the context well, it's fine to return fewer, or none at all." +
+    (platform ? " Ideas are for " + platform + "." : "") +
+    ' Respond ONLY with a raw JSON array (no markdown fences, no commentary) of 0 to ' +
+    maxCount +
+    ' objects, shaped like: {"title": short idea title, "hook": one opening line, "format": the exact name of the format you chose from the list above, "structure": the structure you followed (empty string if none applicable), "notes": one sentence on how to shoot it}. If nothing fits well, respond with an empty array [].';
+
+  return prompt;
+}
+
 export function buildAiGeneratePromptGeneric(
   data: AppData,
   categories: Category[],
@@ -191,6 +251,81 @@ export function buildAiGeneratePromptGeneric(
     '], "platform": ' +
     platformOptionsText +
     ', "notes": one sentence on why or how to shoot it, including which structure to follow}.';
+
+  return prompt;
+}
+
+/** Like buildAiGeneratePromptGeneric, but the AI picks its own format+structure fit per idea, draws on a wider per-category pool of library learnings, and returns as many well-fitting ideas as the context supports rather than a fixed count. */
+export function buildSmartAiGeneratePromptGeneric(data: AppData, categories: Category[], platformLabel: string, context: string, maxCount: number): string {
+  const frameworkText = categories
+    .map((c) => {
+      const structuresText = c.structures.map((st) => st.text).filter(Boolean).join(" | ");
+      const angleLines = c.angles
+        .map((a) => {
+          const struct = [structuresText, a.structure].filter(Boolean).join(" + ");
+          return a.name + (struct ? " [structure: " + struct + "]" : "");
+        })
+        .join("; ");
+      const libraryEntries = data.library
+        .filter((e) => e.categoryIds.includes(c.id))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, SMART_MULTI_LIBRARY_CAP_PER_CAT);
+      const libText = libraryEntries.map((e) => e.text).join(" | ");
+      return (
+        c.name +
+        " (" +
+        c.stage +
+        ", " +
+        (c.owner === "personal" ? "Personal" : "Brand") +
+        ")" +
+        (structuresText ? ", structures: " + structuresText : "") +
+        ": " +
+        c.desc +
+        " Formats: " +
+        angleLines +
+        (libText ? " Learnings (use only if genuinely relevant to the idea, fine to use none): " + libText : "")
+      );
+    })
+    .join("\n");
+
+  const hooksText = data.hooks.map((h) => h.text).join(", ");
+  const existing = data.ideas
+    .slice(0, 10)
+    .map((i) => i.title)
+    .filter(Boolean)
+    .join("; ");
+  const inspo = data.inspirations
+    .filter((i) => i.name)
+    .map((p) => p.name + " (" + p.platform + ")" + (p.notes ? " — " + p.notes : ""))
+    .join("\n");
+  const { brandBlock, personalBlock } = buildVoiceAndBrandBlocks(data);
+
+  const platformOptionsText = platformLabel === "YouTube" ? '"YouTube"' : '"Instagram" or "TikTok"';
+
+  let prompt =
+    brandBlock +
+    (personalBlock ? "\n" + personalBlock : "") +
+    "\nYou are a content strategist helping generate short-form video content ideas. Each content type below is tagged Personal or Brand — write Personal-tagged ideas in the personal creator's voice, and Brand-tagged ideas in the brand voice.\n\nContent framework (content type — stage — owner — formats, each with its structure):\n" +
+    frameworkText +
+    "\n\nHook formulas: " +
+    hooksText +
+    "\n\n";
+  if (inspo) prompt += "Creators/pages they like for inspiration:\n" + inspo + "\n\n";
+  if (existing) prompt += "Ideas already logged (avoid repeating):\n" + existing + "\n\n";
+  prompt += "Context from the user right now: " + context + "\n\n";
+
+  prompt +=
+    "For each idea, pick whichever content type and format genuinely suits it — don't force variety for its own sake. Only generate as many genuinely distinct, well-fitting ideas as this context actually supports" +
+    (platformLabel ? " for " + platformLabel : "") +
+    ", up to " +
+    maxCount +
+    " — do not pad to reach that number. If nothing fits the context well, it's fine to return fewer, or none at all. Respond ONLY with a raw JSON array (no markdown fences, no commentary) of 0 to " +
+    maxCount +
+    ' objects shaped like: {"title": short idea title, "hook": one opening line, "category": one of [' +
+    categories.map((c) => c.name).join(", ") +
+    '], "platform": ' +
+    platformOptionsText +
+    ', "format": the format name you chose from that category\'s list, "structure": the structure you followed (empty string if none applicable), "notes": one sentence on why or how to shoot it}. If nothing fits well, respond with an empty array [].';
 
   return prompt;
 }

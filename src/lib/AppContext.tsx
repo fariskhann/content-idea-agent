@@ -8,6 +8,8 @@ import {
   buildAiGeneratePromptForCategory,
   buildAiGeneratePromptGeneric,
   buildScriptPrompt,
+  buildSmartAiGeneratePromptForCategory,
+  buildSmartAiGeneratePromptGeneric,
   getGenerationPools,
 } from "./generation";
 import { complete, parseJsonArray } from "./ai";
@@ -50,6 +52,9 @@ interface AiGenParsedItem {
   hook?: string;
   notes?: string;
   category?: string;
+  format?: string;
+  structure?: string;
+  platform?: Platform;
 }
 
 interface AppState {
@@ -60,6 +65,8 @@ interface AppState {
   activeFrameworksPlatform: PlatformGroup;
   activeBoardPlatform: "All" | "YouTube" | "IGTikTok";
   genContext: string;
+  genSmartMode: boolean;
+  genSmartSummary: { generated: number; max: number } | null;
   generating: boolean;
   genError: string;
   justGenerated: boolean;
@@ -87,6 +94,8 @@ function initialAppState(): AppState {
     activeFrameworksPlatform: "YouTube",
     activeBoardPlatform: "All",
     genContext: "",
+    genSmartMode: false,
+    genSmartSummary: null,
     generating: false,
     genError: "",
     justGenerated: false,
@@ -481,7 +490,12 @@ function useAppStore() {
   // ---- generation ----
   const aiGenerate = useCallback(async () => {
     const d = state.data;
-    setState((s) => ({ ...s, generating: true, genError: "", justGenerated: false }));
+    const smart = state.genSmartMode;
+    if (smart && !state.genContext.trim()) {
+      setState((s) => ({ ...s, genError: "Add a bit of context — rough is fine — so the AI can pick the right fit." }));
+      return;
+    }
+    setState((s) => ({ ...s, generating: true, genError: "", justGenerated: false, genSmartSummary: null }));
     try {
       const cat = state.genCategory !== "all" ? d.categories.find((c) => c.id === state.genCategory) : null;
       const rounds = d.genBatchSize || 1;
@@ -491,7 +505,13 @@ function useAppStore() {
       const pickPlatform = (): Platform => (platformGroup === "YouTube" ? "YouTube" : "Instagram");
       const platformLabel = platformGroup === "YouTube" ? "YouTube" : "Instagram or TikTok";
 
-      if (cat) {
+      const finishSuccess = (summary: { generated: number; max: number } | null) =>
+        setState((s) => ({ ...s, generating: false, justGenerated: true, genSmartSummary: summary }));
+
+      const composeSmartNotes = (p: AiGenParsedItem) =>
+        [p.notes || "", p.format ? "Format: " + p.format : "", p.structure ? "Structure: " + p.structure : ""].filter(Boolean).join(" — ");
+
+      if (cat && !smart) {
         const pools = getPoolsFor(cat);
         const { prompt, slots } = buildAiGeneratePromptForCategory(d, cat, pools, platformLabel, state.genContext, rounds);
         const { text, usage } = await complete({
@@ -521,7 +541,38 @@ function useAppStore() {
             notes: [p.notes || "", slot?.structureText ? "Structure: " + slot.structureText : ""].filter(Boolean).join(" — "),
           });
         });
-      } else {
+        finishSuccess(null);
+      } else if (cat && smart) {
+        const prompt = buildSmartAiGeneratePromptForCategory(d, cat, platformLabel, state.genContext, rounds);
+        const { text, usage } = await complete({
+          model,
+          apiKeys,
+          prompt,
+          maxTokens: Math.min(4000, 500 + rounds * 260),
+        });
+        logUsage({
+          feature: "generate",
+          provider: model.provider,
+          modelId: model.id,
+          modelLabel: model.label,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+        });
+        const parsed = parseJsonArray(text) as AiGenParsedItem[] | null;
+        if (!parsed) throw new Error("unexpected response format");
+        const capped = parsed.slice(0, rounds);
+        capped.forEach((p) => {
+          addIdea({
+            title: p.title || "Untitled idea",
+            hook: p.hook || "",
+            platform: pickPlatform(),
+            categoryId: cat.id,
+            notes: composeSmartNotes(p),
+          });
+        });
+        finishSuccess({ generated: capped.length, max: rounds });
+      } else if (!cat && !smart) {
         const catsInGroup = d.categories.filter((c) => c.platform === platformGroup);
         const prompt = buildAiGeneratePromptGeneric(d, catsInGroup, getPoolsFor, platformLabel, state.genContext, rounds);
         const { text, usage } = await complete({ model, apiKeys, prompt, maxTokens: 1800 });
@@ -546,12 +597,39 @@ function useAppStore() {
             notes: p.notes || "",
           });
         });
+        finishSuccess(null);
+      } else {
+        const catsInGroup = d.categories.filter((c) => c.platform === platformGroup);
+        const prompt = buildSmartAiGeneratePromptGeneric(d, catsInGroup, platformLabel, state.genContext, rounds);
+        const { text, usage } = await complete({ model, apiKeys, prompt, maxTokens: Math.min(3000, 500 + rounds * 220) });
+        logUsage({
+          feature: "generate",
+          provider: model.provider,
+          modelId: model.id,
+          modelLabel: model.label,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+        });
+        const parsed = parseJsonArray(text) as AiGenParsedItem[] | null;
+        if (!parsed) throw new Error("unexpected response format");
+        const capped = parsed.slice(0, rounds);
+        capped.forEach((p) => {
+          const catMatch = catsInGroup.find((c) => c.name === p.category);
+          addIdea({
+            title: p.title || "Untitled idea",
+            hook: p.hook || "",
+            platform: p.platform || pickPlatform(),
+            categoryId: catMatch ? catMatch.id : "",
+            notes: composeSmartNotes(p),
+          });
+        });
+        finishSuccess({ generated: capped.length, max: rounds });
       }
-      setState((s) => ({ ...s, generating: false, justGenerated: true }));
     } catch (err) {
       setState((s) => ({ ...s, generating: false, genError: "Generation failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" }));
     }
-  }, [state.data, state.genCategory, state.genPlatformGroup, state.genContext, state.settings.anthropicApiKey, state.settings.deepseekApiKey, getPoolsFor, addIdea, logUsage]);
+  }, [state.data, state.genCategory, state.genPlatformGroup, state.genContext, state.genSmartMode, state.settings.anthropicApiKey, state.settings.deepseekApiKey, getPoolsFor, addIdea, logUsage]);
 
   const generateScript = useCallback(
     async (id: string, instruction?: string) => {
@@ -607,6 +685,7 @@ function useAppStore() {
   const setActiveFrameworksPlatform = useCallback((p: PlatformGroup) => setState((s) => ({ ...s, activeFrameworksPlatform: p })), []);
   const setActiveBoardPlatform = useCallback((p: "All" | "YouTube" | "IGTikTok") => setState((s) => ({ ...s, activeBoardPlatform: p })), []);
   const setGenContext = useCallback((v: string) => setState((s) => ({ ...s, genContext: v })), []);
+  const setGenSmartMode = useCallback((v: boolean) => setState((s) => ({ ...s, genSmartMode: v })), []);
 
   // ---- export / import ----
   const exportJSON = useCallback(() => {
@@ -756,6 +835,7 @@ function useAppStore() {
     setActiveFrameworksPlatform,
     setActiveBoardPlatform,
     setGenContext,
+    setGenSmartMode,
     exportJSON,
     importJSON,
     updateSettings,
