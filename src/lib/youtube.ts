@@ -59,8 +59,7 @@ export function buildYoutubeAnalysisPrompt(
   data: AppData,
   channelName: string,
   avgViews: number,
-  videos: YoutubeVideo[],
-  taggedCategories: Category[]
+  videos: YoutubeVideo[]
 ): string {
   const { brandBlock, personalBlock } = buildVoiceAndBrandBlocks(data);
   const frameworkText = data.categories
@@ -83,13 +82,6 @@ export function buildYoutubeAnalysisPrompt(
     prompt += "\n";
   });
   prompt += (data.youtubeAnalysisInstructions || DEFAULT_YOUTUBE_ANALYSIS_INSTRUCTIONS) + "\n\n";
-  if (taggedCategories.length) {
-    const names = taggedCategories.map((c) => c.name).join(", ");
-    const formats = taggedCategories.flatMap((c) => c.angles.map((a) => a.name)).filter(Boolean).join(", ");
-    prompt += `This creator is tagged under our "${names}" content type${taggedCategories.length > 1 ? "s" : ""} here.${
-      formats ? ` Default any "what to borrow/adapt" guidance to one of that type's formats (${formats})` : ` Default any "what to borrow/adapt" guidance to that content type`
-    } unless another of our content types is a clearly better fit for a specific video.\n\n`;
-  }
   if (hooksText) prompt += `Where a video's hook style maps onto one of our own hook formulas above, name that formula specifically wherever you describe what to borrow/adapt, instead of describing it generically.\n\n`;
   prompt +=
     'Respond ONLY with a raw JSON array (no markdown fences, no commentary) of exactly ' +

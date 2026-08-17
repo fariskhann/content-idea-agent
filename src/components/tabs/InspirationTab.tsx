@@ -8,7 +8,7 @@ import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { genId } from "@/lib/id";
 import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt, buildDistillationPrompt } from "@/lib/youtube";
-import type { AnalysisField as AnalysisFieldType, Category, Inspiration, LibraryEntry, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
+import type { AnalysisField as AnalysisFieldType, Inspiration, LibraryEntry, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
 
 function platformLabel(p: Inspiration["platform"]): string {
   return p === "YouTube" ? "YouTube" : "IG + TikTok";
@@ -41,7 +41,7 @@ function AnalysisFieldView({ value }: { value: AnalysisFieldType }) {
   );
 }
 
-function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedCategories: Category[] }) {
+function YoutubeSection({ insp }: { insp: Inspiration }) {
   const app = useApp();
   const [count, setCount] = useState(DEFAULT_VIDEO_COUNT);
   const [fetching, setFetching] = useState(false);
@@ -165,7 +165,7 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
       app.updateInspirationYoutube(insp.id, { youtubeVideos: updatedVideos });
       if (transcriptWarning) setError(transcriptWarning);
 
-      const prompt = buildYoutubeAnalysisPrompt(app.data, insp.name || insp.handle, avgViews, withTranscripts, taggedCategories);
+      const prompt = buildYoutubeAnalysisPrompt(app.data, insp.name || insp.handle, avgViews, withTranscripts);
       const model = getModel(app.data.aiModel);
       const { text, usage } = await complete({
         model,
@@ -488,7 +488,6 @@ function YoutubeSection({ insp, taggedCategories }: { insp: Inspiration; taggedC
 
 function InspirationDetail({ insp }: { insp: Inspiration }) {
   const app = useApp();
-  const taggedCategories = app.data.categories.filter((c) => insp.tags.includes(c.id));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -542,7 +541,7 @@ function InspirationDetail({ insp }: { insp: Inspiration }) {
           fallbackTitle="Something in this creator's fetched YouTube data crashed the page. This is likely a malformed video/transcript record — resetting clears just that data (you'll need to re-fetch and re-analyze)."
           onReset={() => app.updateInspirationYoutube(insp.id, { youtubeVideos: [], youtubeAnalysis: undefined, youtubeLastFetched: undefined })}
         >
-          <YoutubeSection insp={insp} taggedCategories={taggedCategories} />
+          <YoutubeSection insp={insp} />
         </ErrorBoundary>
       )}
     </div>
@@ -572,8 +571,8 @@ export function InspirationTab() {
         <div>
           <h1 style={pageTitle}>Inspiration</h1>
           <p style={{ ...pageSubtitle, margin: 0 }}>
-            Pages, creators, or competitors worth tracking. Tag them by category so the generator can borrow their angle. For YouTube channels, pull
-            recent videos and flag which ones outperformed the channel&apos;s own baseline.
+            Pages, creators, or competitors worth tracking. For YouTube channels, pull recent videos, flag which ones outperformed the channel&apos;s own
+            baseline, and distill the good ones into your Library.
           </p>
         </div>
         <button onClick={handleAdd} style={{ flexShrink: 0, ...primaryBtn, padding: "11px 18px", fontSize: 13 }}>

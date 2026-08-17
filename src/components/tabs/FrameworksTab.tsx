@@ -206,8 +206,8 @@ export function FrameworksTab() {
             style={{ ...textarea, maxWidth: 640 }}
           />
           <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
-            Sent as-is on every YouTube outlier analysis, right after the video list. The generator also auto-appends a note biasing the &quot;borrow&quot;
-            suggestion toward whichever of your content types the creator is tagged with in Inspiration.
+            Sent as-is on every YouTube outlier analysis, right after the video list. Once you distill an analysed video into the Library, the AI decides
+            which content type each learning belongs to on its own — no manual tagging needed.
           </div>
         </div>
 
