@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/lib/AppContext";
-import { chipStyle, kicker, muted, pageSubtitle, pageTitle, primaryBtn, secondaryBtn, textarea } from "@/lib/styles";
+import { chipStyle, kicker, muted, pageSubtitle, pageTitle, primaryBtn, textarea } from "@/lib/styles";
 import type { PlatformGroup } from "@/lib/types";
 
 const PLATFORM_GROUPS: { value: PlatformGroup; label: string }[] = [
@@ -19,8 +19,7 @@ export function GenerateTab() {
     <div style={{ maxWidth: 760 }}>
       <h1 style={pageTitle}>Generate ideas</h1>
       <p style={pageSubtitle}>
-        Pick a platform, then a category and context if you&apos;ve got it, then spin up ideas — quick combinatorial spins, or AI-written concepts using your
-        framework and inspiration board.
+        Pick a platform, then a category and context if you&apos;ve got it, then generate AI-written concepts using your framework, inspiration, and library.
       </p>
 
       <div style={{ ...kicker, marginBottom: 10 }}>Platform</div>
@@ -107,9 +106,6 @@ export function GenerateTab() {
       </div>
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <button style={secondaryBtn} onClick={app.quickSpin}>
-          Quick spin
-        </button>
         <button style={primaryBtn} onClick={app.aiGenerate} disabled={app.generating}>
           {app.generating ? "Generating…" : "Generate with AI"}
         </button>

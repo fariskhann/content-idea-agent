@@ -8,7 +8,6 @@ import {
   buildAiGeneratePromptForCategory,
   buildAiGeneratePromptGeneric,
   buildScriptPrompt,
-  expandIdeas,
   getGenerationPools,
 } from "./generation";
 import { complete, parseJsonArray } from "./ai";
@@ -480,36 +479,6 @@ function useAppStore() {
   }, []);
 
   // ---- generation ----
-  const quickSpin = useCallback(() => {
-    const d = state.data;
-    const catsInGroup = d.categories.filter((c) => c.platform === state.genPlatformGroup);
-    if (!catsInGroup.length) {
-      setState((s) => ({ ...s, genError: `No content types yet for this platform — add one in Frameworks.` }));
-      return;
-    }
-    const rounds = d.genBatchSize || 1;
-    const newIdeas: Partial<Idea>[] = [];
-    for (let i = 0; i < rounds; i++) {
-      const cat = state.genCategory !== "all" ? d.categories.find((c) => c.id === state.genCategory) : catsInGroup[Math.floor(Math.random() * catsInGroup.length)];
-      if (!cat || !cat.angles.length) {
-        setState((s) => ({ ...s, genError: `Add at least one format to "${cat ? cat.name : "this category"}" first, in Frameworks.` }));
-        return;
-      }
-      const hook = d.hooks.length ? d.hooks[Math.floor(Math.random() * d.hooks.length)] : null;
-      const platform: Platform = state.genPlatformGroup === "YouTube" ? "YouTube" : "Instagram";
-      const hookLine = hook ? `Open with a "${hook.text}"...` : "";
-      const pools = getPoolsFor(cat);
-      const ideas = expandIdeas(cat, "", hookLine, platform, "", pools);
-      if (!ideas.length) {
-        setState((s) => ({ ...s, genError: `Select at least one format to include for "${cat.name}".` }));
-        return;
-      }
-      newIdeas.push(...ideas);
-    }
-    newIdeas.forEach((idea) => addIdea(idea));
-    setState((s) => ({ ...s, genError: "", justGenerated: true }));
-  }, [state.data, state.genCategory, state.genPlatformGroup, getPoolsFor, addIdea]);
-
   const aiGenerate = useCallback(async () => {
     const d = state.data;
     setState((s) => ({ ...s, generating: true, genError: "", justGenerated: false }));
@@ -776,7 +745,6 @@ function useAppStore() {
     toggleFormatCheck,
     toggleStructureCheck,
     getPoolsFor,
-    quickSpin,
     aiGenerate,
     generateScript,
     setActiveTab,

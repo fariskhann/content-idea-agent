@@ -1,4 +1,4 @@
-import type { AppData, Angle, Category, Idea, TextItem, Platform } from "./types";
+import type { AppData, Angle, Category, Idea, TextItem } from "./types";
 
 export interface GenerationPools {
   angles: Angle[];
@@ -17,48 +17,6 @@ export function getGenerationPools(
   const angles = scoped ? cat.angles.filter((a) => isFormatChecked(a.id)) : cat.angles;
   const structures = scoped ? cat.structures.filter((st) => isStructureChecked(st.id)) : cat.structures;
   return { angles, structures };
-}
-
-export interface ExpandedIdeaDraft {
-  title: string;
-  hook: string;
-  platform: Platform;
-  categoryId: string;
-  notes: string;
-}
-
-/** Crosses every included format × every included structure into one draft idea each. */
-export function expandIdeas(
-  cat: Category,
-  baseTitle: string,
-  baseHook: string,
-  platform: Platform,
-  baseNotes: string,
-  pools: GenerationPools
-): ExpandedIdeaDraft[] {
-  const { angles, structures } = pools;
-  const out: ExpandedIdeaDraft[] = [];
-  if (!angles.length) return out;
-  const multiFormat = angles.length > 1;
-  if (structures.length) {
-    const multiStruct = structures.length > 1;
-    angles.forEach((angle) => {
-      structures.forEach((st, idx) => {
-        const structureText = [st.text, angle.structure].filter(Boolean).join(" + ");
-        const notes = [baseNotes, structureText ? "Structure: " + structureText : ""].filter(Boolean).join(" — ");
-        let title = baseTitle && multiFormat ? baseTitle + " — " + angle.name : baseTitle || angle.name;
-        if (multiStruct) title += " — variant " + (idx + 1);
-        out.push({ title, hook: baseHook, platform, categoryId: cat.id, notes });
-      });
-    });
-  } else {
-    angles.forEach((angle) => {
-      const notes = [baseNotes, angle.structure ? "Structure: " + angle.structure : ""].filter(Boolean).join(" — ");
-      const title = baseTitle && multiFormat ? baseTitle + " — " + angle.name : baseTitle || angle.name;
-      out.push({ title, hook: baseHook, platform, categoryId: cat.id, notes });
-    });
-  }
-  return out;
 }
 
 export function buildVoiceAndBrandBlocks(data: AppData): { brandBlock: string; personalBlock: string } {
