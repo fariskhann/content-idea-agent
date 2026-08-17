@@ -25,6 +25,7 @@ import type {
   Idea,
   IdeaStatus,
   Inspiration,
+  InspirationPlatform,
   LibraryEntry,
   Platform,
   PlatformGroup,
@@ -33,7 +34,16 @@ import type {
 
 const STORAGE_KEY = "cia_v1";
 
-/** Backfills Category.platform / Inspiration.platform for data saved before those fields existed (or before Inspiration.platform was narrowed to just YouTube/IGTikTok) — non-destructive, idempotent. Run on every load, not just migration, since already-migrated DB rows can predate this. */
+/** Legacy Inspiration rows may still carry the old merged "IGTikTok" value (or anything else unrecognized) from before Inspiration.platform became a real 3-way YouTube/Instagram/TikTok value — infer from the saved link/handle where possible, since that's a strictly-better-than-arbitrary guess and still easy to correct via the dropdown if wrong. */
+function normalizeInspirationPlatform(i: Inspiration): InspirationPlatform {
+  if (i.platform === "YouTube" || i.platform === "Instagram" || i.platform === "TikTok") return i.platform;
+  const text = `${i.link} ${i.handle}`.toLowerCase();
+  if (text.includes("tiktok.com")) return "TikTok";
+  if (text.includes("instagram.com")) return "Instagram";
+  return "Instagram";
+}
+
+/** Backfills Category.platform / Inspiration.platform for data saved before those fields existed (or before Inspiration.platform was narrowed to just YouTube/IGTikTok, and later split back into a real 3-way YouTube/Instagram/TikTok value) — non-destructive, idempotent. Run on every load, not just migration, since already-migrated DB rows can predate this. */
 function normalizePlatformGroups(data: AppData): AppData {
   return {
     ...data,
@@ -43,7 +53,7 @@ function normalizePlatformGroups(data: AppData): AppData {
     })),
     inspirations: (data.inspirations || []).map((i) => ({
       ...i,
-      platform: i.platform === "YouTube" || i.platform === "IGTikTok" ? i.platform : "IGTikTok",
+      platform: normalizeInspirationPlatform(i),
     })),
   };
 }
@@ -138,6 +148,7 @@ function initialAppState(): AppState {
       anthropicApiKey: "",
       deepseekApiKey: "",
       youtubeApiKey: "",
+      apifyApiKey: "",
       supadataApiKey: "",
       supadataResetDay: 0,
       supadataBackupApiKey: "",
@@ -881,8 +892,8 @@ function useAppStore() {
     [setData]
   );
 
-  // ---- youtube inspiration ----
-  const updateInspirationYoutube = useCallback(
+  // ---- fetched inspiration media (YouTube/TikTok/Instagram) ----
+  const updateInspirationMedia = useCallback(
     (id: string, patch: Partial<Inspiration>) =>
       setData((d) => ({ ...d, inspirations: d.inspirations.map((i) => (i.id === id ? { ...i, ...patch } : i)) })),
     [setData]
@@ -954,7 +965,7 @@ function useAppStore() {
     addLibraryEntries,
     updateLibraryEntryText,
     removeLibraryEntry,
-    updateInspirationYoutube,
+    updateInspirationMedia,
     logUsage,
     clearUsage,
     setUsageDialogOpen,

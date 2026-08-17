@@ -12,7 +12,7 @@ function average(values: number[]): number {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
-export function computeOutliers(videos: YoutubeVideo[]): { avgViews: number; outliers: YoutubeVideo[] } {
+export function computeOutliers<T extends { viewCount: number }>(videos: T[]): { avgViews: number; outliers: T[] } {
   const avgViews = average(videos.map((v) => v.viewCount));
   const threshold = avgViews * OUTLIER_MULTIPLIER;
   const outliers = avgViews > 0 ? videos.filter((v) => v.viewCount >= threshold) : [];

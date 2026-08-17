@@ -8,10 +8,12 @@ import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { genId } from "@/lib/id";
 import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt, buildDistillationPrompt } from "@/lib/youtube";
-import type { AnalysisField as AnalysisFieldType, Inspiration, LibraryEntry, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
+import { fetchTikTokVideos, fetchInstagramVideos, SOCIAL_FETCH_RATES } from "@/lib/socialVideos";
+import { toPlatformGroup } from "@/lib/platform";
+import type { AnalysisField as AnalysisFieldType, Inspiration, LibraryEntry, SocialPlatformKind, SocialVideo, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
 
 function platformLabel(p: Inspiration["platform"]): string {
-  return p === "YouTube" ? "YouTube" : "IG + TikTok";
+  return p;
 }
 
 function fmtViews(n: number): string {
@@ -113,7 +115,7 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
         const prev = existingById.get(v.id);
         return { ...v, transcript: prev?.transcript, transcriptStatus: prev?.transcriptStatus || "not_fetched" };
       });
-      app.updateInspirationYoutube(insp.id, { youtubeVideos: merged, youtubeLastFetched: Date.now() });
+      app.updateInspirationMedia(insp.id, { youtubeVideos: merged, youtubeLastFetched: Date.now() });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch videos.");
     } finally {
@@ -162,7 +164,7 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
         }
         withTranscripts.push(current);
       }
-      app.updateInspirationYoutube(insp.id, { youtubeVideos: updatedVideos });
+      app.updateInspirationMedia(insp.id, { youtubeVideos: updatedVideos });
       if (transcriptWarning) setError(transcriptWarning);
 
       const prompt = buildYoutubeAnalysisPrompt(app.data, insp.name || insp.handle, avgViews, withTranscripts);
@@ -203,7 +205,7 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
       const newIds = new Set(newResults.map((r) => r.videoId));
       const mergedResults = [...(insp.youtubeAnalysis?.results || []).filter((r) => !newIds.has(r.videoId)), ...newResults];
       const generatedAt = Date.now();
-      app.updateInspirationYoutube(insp.id, { youtubeAnalysis: { generatedAt, avgViews, results: mergedResults } });
+      app.updateInspirationMedia(insp.id, { youtubeAnalysis: { generatedAt, avgViews, results: mergedResults } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed — try again.");
     } finally {
@@ -223,7 +225,7 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
   /** Clears cached transcript status/text and any prior AI notes so the next analyze run starts clean. */
   function handleReset() {
     const resetVideos = videos.map((v) => ({ ...v, transcript: undefined, transcriptStatus: "not_fetched" as const }));
-    app.updateInspirationYoutube(insp.id, { youtubeVideos: resetVideos, youtubeAnalysis: undefined });
+    app.updateInspirationMedia(insp.id, { youtubeVideos: resetVideos, youtubeAnalysis: undefined });
     setMinimizedOverrides({});
     setError("");
   }
@@ -242,7 +244,7 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
     }
     setDistilling(true);
     try {
-      const platformCategories = app.data.categories.filter((c) => c.platform === insp.platform);
+      const platformCategories = app.data.categories.filter((c) => c.platform === toPlatformGroup(insp.platform));
       const targets = selectedAnalysedVideos.map((video) => ({ video, result: analysisById.get(video.id)! }));
       const prompt = buildDistillationPrompt(app.data, insp.name || insp.handle, platformCategories, targets);
       const model = getModel(app.data.aiModel);
@@ -274,7 +276,7 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
           return {
             id: genId(),
             categoryIds,
-            platform: insp.platform,
+            platform: toPlatformGroup(insp.platform),
             text: String(p.text || "").trim(),
             sourceInspirationId: insp.id,
             sourceInspirationName: insp.name || insp.handle,
@@ -486,6 +488,135 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
   );
 }
 
+/** Fetch-and-list only (no analysis/transcripts/library — that's a deferred follow-up), covering both TikTok and Instagram since the fetch-step UI is nearly identical between them. */
+function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: SocialPlatformKind }) {
+  const app = useApp();
+  const [count, setCount] = useState(DEFAULT_VIDEO_COUNT);
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState("");
+
+  const videos: SocialVideo[] = (platform === "TikTok" ? insp.tiktokVideos : insp.instagramVideos) || [];
+  const { avgViews, outliers } = computeOutliers(videos);
+  const outlierIds = new Set(outliers.map((v) => v.id));
+
+  async function handleFetch() {
+    setError("");
+    if (!app.settings.apifyApiKey) {
+      setError("Add your Apify API token in Settings first.");
+      return;
+    }
+    const ref = insp.link || insp.handle;
+    if (!ref) {
+      setError("Add this creator's link or @handle first.");
+      return;
+    }
+    setFetching(true);
+    try {
+      const fetchFn = platform === "TikTok" ? fetchTikTokVideos : fetchInstagramVideos;
+      const res = await fetchFn({ apiKey: app.settings.apifyApiKey, ref, maxResults: count });
+      app.updateInspirationMedia(
+        insp.id,
+        platform === "TikTok"
+          ? { tiktokVideos: res.videos, tiktokLastFetched: Date.now() }
+          : { instagramVideos: res.videos, instagramLastFetched: Date.now() }
+      );
+      app.logUsage({
+        feature: platform === "TikTok" ? "tiktok-fetch" : "instagram-fetch",
+        provider: "apify",
+        modelId: platform === "TikTok" ? "tiktok-scraper" : "instagram-reel-scraper",
+        modelLabel: platform === "TikTok" ? "TikTok fetch" : "Instagram fetch",
+        inputTokens: 0,
+        outputTokens: res.videos.length,
+        costUsd: res.videos.length * SOCIAL_FETCH_RATES[platform],
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to fetch ${platform} videos.`);
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: `1px solid ${muted(25)}`, marginTop: 8, paddingTop: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>{platform} videos</div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>Last</span>
+        <input
+          type="number"
+          min={1}
+          max={MAX_VIDEO_COUNT}
+          value={count}
+          onChange={(e) => setCount(Math.min(MAX_VIDEO_COUNT, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+          style={{ width: 52, border: `1px solid ${muted(25)}`, background: "var(--color-surface)", fontSize: 12, color: "var(--color-text)", padding: "5px 6px" }}
+        />
+        <span style={{ fontSize: 11, color: muted(55) }}>videos (max {MAX_VIDEO_COUNT})</span>
+        <button
+          onClick={handleFetch}
+          disabled={fetching}
+          style={{ border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+        >
+          {fetching ? "Fetching…" : videos.length ? "Refresh videos" : "Fetch videos"}
+        </button>
+      </div>
+
+      {error && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{error}</div>}
+
+      {videos.length > 0 && (
+        <div style={{ fontSize: 11, color: muted(55) }}>
+          Average views this batch: {fmtViews(avgViews)} · {outliers.length} outlier{outliers.length === 1 ? "" : "s"} flagged (≥1.5× average)
+        </div>
+      )}
+
+      {videos.length === 0 && !fetching && (
+        <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: muted(50), border: `1px solid ${muted(15)}` }}>No videos fetched yet.</div>
+      )}
+
+      {videos.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10 }}>
+          {videos.map((v) => {
+            const isOutlier = outlierIds.has(v.id);
+            return (
+              <div
+                key={v.id}
+                style={{ display: "flex", flexDirection: "column", background: "var(--color-surface)", border: isOutlier ? "1px solid var(--color-accent)" : `1px solid ${muted(15)}` }}
+              >
+                <div style={{ position: "relative", aspectRatio: "9 / 16", background: muted(10), flexShrink: 0 }}>
+                  {v.thumbnail && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={v.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} className="grayscale" />
+                  )}
+                  {isOutlier && (
+                    <span
+                      style={{ position: "absolute", top: 5, right: 5, fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "1px 6px", whiteSpace: "nowrap" }}
+                    >
+                      Outlier
+                    </span>
+                  )}
+                </div>
+                <div style={{ padding: "8px 5px 8px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontSize: 12, color: "var(--color-text)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                    {v.caption || "(no caption)"}
+                  </span>
+                  <span style={{ fontSize: 11, color: muted(55) }}>
+                    {fmtViews(v.viewCount)} views · {fmtViews(v.likeCount)} likes
+                    {v.publishedAt && ` · ${new Date(v.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`}
+                  </span>
+                  {v.url && (
+                    <a href={v.url} target="_blank" rel="noopener" style={{ fontSize: 11 }}>
+                      View ↗
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InspirationDetail({ insp }: { insp: Inspiration }) {
   const app = useApp();
 
@@ -521,7 +652,8 @@ function InspirationDetail({ insp }: { insp: Inspiration }) {
           style={{ border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 13, color: "var(--color-text)", padding: "8px 10px" }}
         >
           <option value="YouTube">YouTube</option>
-          <option value="IGTikTok">IG + TikTok</option>
+          <option value="Instagram">Instagram</option>
+          <option value="TikTok">TikTok</option>
         </select>
         <input
           value={insp.link}
@@ -539,9 +671,22 @@ function InspirationDetail({ insp }: { insp: Inspiration }) {
       {insp.platform === "YouTube" && (
         <ErrorBoundary
           fallbackTitle="Something in this creator's fetched YouTube data crashed the page. This is likely a malformed video/transcript record — resetting clears just that data (you'll need to re-fetch and re-analyze)."
-          onReset={() => app.updateInspirationYoutube(insp.id, { youtubeVideos: [], youtubeAnalysis: undefined, youtubeLastFetched: undefined })}
+          onReset={() => app.updateInspirationMedia(insp.id, { youtubeVideos: [], youtubeAnalysis: undefined, youtubeLastFetched: undefined })}
         >
           <YoutubeSection insp={insp} />
+        </ErrorBoundary>
+      )}
+      {(insp.platform === "TikTok" || insp.platform === "Instagram") && (
+        <ErrorBoundary
+          fallbackTitle="Something in this creator's fetched video data crashed the page. This is likely a malformed record — resetting clears just that data (you'll need to re-fetch)."
+          onReset={() =>
+            app.updateInspirationMedia(
+              insp.id,
+              insp.platform === "TikTok" ? { tiktokVideos: [], tiktokLastFetched: undefined } : { instagramVideos: [], instagramLastFetched: undefined }
+            )
+          }
+        >
+          <SocialVideoSection key={insp.platform} insp={insp} platform={insp.platform} />
         </ErrorBoundary>
       )}
     </div>

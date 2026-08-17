@@ -128,7 +128,7 @@ export function defaultSeed(): AppData {
         id: g(),
         name: "Austin Georgas",
         handle: "@austingeorgas",
-        platform: "IGTikTok",
+        platform: "Instagram",
         link: "https://www.instagram.com/austingeorgas/",
         tags: ["yap"],
         notes: "Yap content — raw, direct-to-camera reference.",

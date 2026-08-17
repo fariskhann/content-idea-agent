@@ -165,8 +165,8 @@ export function SettingsDialog() {
           <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>Settings</h2>
           <p style={{ fontSize: 13, color: muted(60), margin: 0 }}>
             Synced to your account, so these carry over across devices. Anthropic and YouTube calls go straight from your browser (so those keys are
-            visible in that request); DeepSeek and Supadata calls route through this app&apos;s own server instead, since their APIs don&apos;t support
-            direct browser requests.
+            visible in that request); DeepSeek, Supadata, and Apify calls route through this app&apos;s own server instead, since their APIs
+            don&apos;t support direct browser requests.
           </p>
         </div>
 
@@ -223,6 +223,20 @@ export function SettingsDialog() {
           />
           <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
             API-key-only credential from Google Cloud Console (no OAuth needed) — used to pull channel video lists in Inspiration.
+          </div>
+        </div>
+
+        <div>
+          <div style={kicker}>Apify API token</div>
+          <KeyInput
+            value={app.settings.apifyApiKey}
+            onChange={(v) => app.updateSettings({ apifyApiKey: v })}
+            placeholder="apify_api_..."
+            revealed={!!revealed.apify}
+            onToggleReveal={() => toggleReveal("apify")}
+          />
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
+            One account-level token — used to pull TikTok and Instagram video lists in Inspiration.
           </div>
         </div>
 

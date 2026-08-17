@@ -11,6 +11,8 @@ const FEATURE_LABEL: Record<string, string> = {
   script: "Script",
   "youtube-analysis": "YouTube analysis",
   "library-distill": "Library distill",
+  "tiktok-fetch": "TikTok fetch",
+  "instagram-fetch": "Instagram fetch",
 };
 
 export function UsageDialog() {

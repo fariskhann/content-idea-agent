@@ -1,4 +1,4 @@
-export type Provider = "anthropic" | "deepseek";
+export type Provider = "anthropic" | "deepseek" | "apify";
 
 export interface ModelInfo {
   /** Stable key stored in app data / settings — never changes even if the underlying API id does. */
@@ -49,5 +49,7 @@ export function costUsd(model: ModelInfo, inputTokens: number, outputTokens: num
 }
 
 export function providerLabel(provider: Provider): string {
-  return provider === "anthropic" ? "Anthropic" : "DeepSeek";
+  if (provider === "anthropic") return "Anthropic";
+  if (provider === "deepseek") return "DeepSeek";
+  return "Apify";
 }

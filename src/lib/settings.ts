@@ -6,6 +6,8 @@ export interface Settings {
   anthropicApiKey: string;
   deepseekApiKey: string;
   youtubeApiKey: string;
+  /** One account-level Apify token, used for both the TikTok and Instagram video-fetch actors. */
+  apifyApiKey: string;
   /** The key actually used for transcript calls. */
   supadataApiKey: string;
   /** Day of month (1-28) this key's plan renews — used only to estimate the local usage counter. */
@@ -19,6 +21,7 @@ const empty: Settings = {
   anthropicApiKey: "",
   deepseekApiKey: "",
   youtubeApiKey: "",
+  apifyApiKey: "",
   supadataApiKey: "",
   supadataResetDay: 0,
   supadataBackupApiKey: "",

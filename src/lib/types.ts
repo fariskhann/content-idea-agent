@@ -1,6 +1,9 @@
 export type Platform = "Any" | "YouTube" | "Instagram" | "TikTok";
 /** The platform group a Category belongs to — Instagram and TikTok are merged into one group for content-type/format purposes. */
 export type PlatformGroup = "YouTube" | "IGTikTok";
+/** Inspiration's real platform — unlike PlatformGroup, IG and TikTok are kept distinct here since fetching a creator's videos needs to know which literal platform they're on. See lib/platform.ts's toPlatformGroup() for mapping back to PlatformGroup where content-type/library matching needs it. */
+export type InspirationPlatform = "YouTube" | "Instagram" | "TikTok";
+export type SocialPlatformKind = "TikTok" | "Instagram";
 export type Stage = "TOF" | "MOF" | "BOF";
 export type Owner = "brand" | "personal";
 export type IdeaStatus = "idea" | "scripted" | "filmed" | "posted";
@@ -76,17 +79,36 @@ export interface YoutubeAnalysis {
   results: YoutubeOutlierResult[];
 }
 
+export interface SocialVideo {
+  id: string;
+  platform: SocialPlatformKind;
+  thumbnail: string;
+  caption: string;
+  viewCount: number;
+  likeCount: number;
+  commentCount: number;
+  /** TikTok only. */
+  shareCount?: number;
+  publishedAt: string;
+  /** TikTok/IG URLs aren't reconstructable from id alone the way a YouTube URL is, so store it directly. */
+  url: string;
+}
+
 export interface Inspiration {
   id: string;
   name: string;
   handle: string;
-  platform: PlatformGroup;
+  platform: InspirationPlatform;
   link: string;
   tags: string[];
   notes: string;
   youtubeVideos?: YoutubeVideo[];
   youtubeLastFetched?: number;
   youtubeAnalysis?: YoutubeAnalysis;
+  tiktokVideos?: SocialVideo[];
+  tiktokLastFetched?: number;
+  instagramVideos?: SocialVideo[];
+  instagramLastFetched?: number;
 }
 
 export interface LibraryEntry {
