@@ -19,6 +19,20 @@ export function computeOutliers<T extends { viewCount: number }>(videos: T[]): {
   return { avgViews, outliers };
 }
 
+/** How many of the most-recent items to peek at on a refresh, before paying for a full re-fetch. */
+export const REFRESH_PEEK_COUNT = 5;
+
+/**
+ * Compares a small peeked batch of most-recent items against what's already stored, to decide whether a
+ * full re-fetch is actually warranted. These APIs return newest-first, so if the peek isn't ENTIRELY new,
+ * we've already found the exact new items (everything before the first already-known one) with no further
+ * calls needed — only an all-new peek means there might be more beyond what we peeked at.
+ */
+export function findNewItems<T extends { id: string }>(peeked: T[], existingIds: Set<string>): { newItems: T[]; allNew: boolean } {
+  const newItems = peeked.filter((v) => !existingIds.has(v.id));
+  return { newItems, allNew: peeked.length > 0 && newItems.length === peeked.length };
+}
+
 export interface FetchVideosResponse {
   channelId: string;
   channelTitle: string;

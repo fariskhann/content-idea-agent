@@ -7,7 +7,7 @@ import { muted, pageSubtitle, pageTitle, primaryBtn, removeBtn } from "@/lib/sty
 import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { genId } from "@/lib/id";
-import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt, buildDistillationPrompt } from "@/lib/youtube";
+import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, REFRESH_PEEK_COUNT, findNewItems, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt, buildDistillationPrompt } from "@/lib/youtube";
 import { fetchTikTokVideos, fetchInstagramVideos, SOCIAL_FETCH_RATES } from "@/lib/socialVideos";
 import { toPlatformGroup } from "@/lib/platform";
 import type { AnalysisField as AnalysisFieldType, Inspiration, LibraryEntry, SocialPlatformKind, SocialVideo, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
@@ -50,6 +50,7 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [distilling, setDistilling] = useState(false);
   const [error, setError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const [expandedTranscriptIds, setExpandedTranscriptIds] = useState<Set<string>>(new Set());
   const [minimizedOverrides, setMinimizedOverrides] = useState<Record<string, boolean>>({});
 
@@ -98,6 +99,7 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
 
   async function handleFetch() {
     setError("");
+    setStatusMessage("");
     if (!app.settings.youtubeApiKey) {
       setError("Add your YouTube Data API key in Settings first.");
       return;
@@ -109,6 +111,27 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
     }
     setFetching(true);
     try {
+      // The peek only looks at the newest few, so it can only tell us "is there anything newer" — if the
+      // requested count is bigger than what's already stored, the ask is "go deeper into the back catalog,"
+      // which the peek can't answer (those older videos wouldn't show up as new). Skip straight to a full fetch then.
+      if (videos.length > 0 && count <= videos.length) {
+        // Cheap check first: peek at just the most recent few before paying for a full re-fetch (quota-wise, not dollar cost for YouTube, but no reason to redo work when nothing's changed).
+        const existingIds = new Set(videos.map((v) => v.id));
+        const peekRes = await fetchChannelVideos({ apiKey: app.settings.youtubeApiKey, ref, maxResults: Math.min(REFRESH_PEEK_COUNT, count) });
+        const { newItems, allNew } = findNewItems(peekRes.videos, existingIds);
+        if (!allNew) {
+          if (newItems.length > 0) {
+            const additions: YoutubeVideo[] = newItems.map((v) => ({ ...v, transcriptStatus: "not_fetched" }));
+            app.updateInspirationMedia(insp.id, { youtubeVideos: [...additions, ...videos], youtubeLastFetched: Date.now() });
+            setStatusMessage(`Added ${newItems.length} new video${newItems.length === 1 ? "" : "s"}.`);
+          } else {
+            app.updateInspirationMedia(insp.id, { youtubeLastFetched: Date.now() });
+            setStatusMessage("No new videos since last fetch.");
+          }
+          return;
+        }
+        // The whole peek was new — there may be more than a small peek can see, so fall through to a full fetch.
+      }
       const res = await fetchChannelVideos({ apiKey: app.settings.youtubeApiKey, ref, maxResults: count });
       const existingById = new Map(videos.map((v) => [v.id, v]));
       const merged: YoutubeVideo[] = res.videos.map((v) => {
@@ -351,6 +374,7 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
       </div>
 
       {error && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{error}</div>}
+      {statusMessage && <div style={{ fontSize: 11, color: muted(60) }}>{statusMessage}</div>}
 
       {videos.length > 0 && (
         <div style={{ fontSize: 11, color: muted(55) }}>
@@ -495,13 +519,27 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
   const [fetching, setFetching] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
 
   const videos: SocialVideo[] = (platform === "TikTok" ? insp.tiktokVideos : insp.instagramVideos) || [];
   const { avgViews, outliers } = computeOutliers(videos);
   const outlierIds = new Set(outliers.map((v) => v.id));
 
+  function logFetchUsage(resultCount: number) {
+    app.logUsage({
+      feature: platform === "TikTok" ? "tiktok-fetch" : "instagram-fetch",
+      provider: "apify",
+      modelId: platform === "TikTok" ? "tiktok-scraper" : "instagram-reel-scraper",
+      modelLabel: platform === "TikTok" ? "TikTok fetch" : "Instagram fetch",
+      inputTokens: 0,
+      outputTokens: resultCount,
+      costUsd: resultCount * SOCIAL_FETCH_RATES[platform],
+    });
+  }
+
   async function handleFetch() {
     setError("");
+    setStatusMessage("");
     if (!app.settings.apifyApiKey) {
       setError("Add your Apify API token in Settings first.");
       return;
@@ -520,6 +558,32 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
     const tick = setInterval(() => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000);
     try {
       const fetchFn = platform === "TikTok" ? fetchTikTokVideos : fetchInstagramVideos;
+      // The peek only looks at the newest few, so it can only tell us "is there anything newer" — if the
+      // requested count is bigger than what's already stored, the ask is "go deeper into the back catalog,"
+      // which the peek can't answer (those older videos wouldn't show up as new). Skip straight to a full fetch then.
+      if (videos.length > 0 && count <= videos.length) {
+        // Cheap check first: peek at just the most recent few before paying Apify for a full re-fetch.
+        const existingIds = new Set(videos.map((v) => v.id));
+        const peekRes = await fetchFn({ apiKey: app.settings.apifyApiKey, ref, maxResults: Math.min(REFRESH_PEEK_COUNT, count) });
+        logFetchUsage(peekRes.videos.length);
+        const { newItems, allNew } = findNewItems(peekRes.videos, existingIds);
+        if (!allNew) {
+          if (newItems.length > 0) {
+            app.updateInspirationMedia(
+              insp.id,
+              platform === "TikTok"
+                ? { tiktokVideos: [...newItems, ...videos], tiktokLastFetched: Date.now() }
+                : { instagramVideos: [...newItems, ...videos], instagramLastFetched: Date.now() }
+            );
+            setStatusMessage(`Added ${newItems.length} new video${newItems.length === 1 ? "" : "s"}.`);
+          } else {
+            app.updateInspirationMedia(insp.id, platform === "TikTok" ? { tiktokLastFetched: Date.now() } : { instagramLastFetched: Date.now() });
+            setStatusMessage("No new videos since last fetch.");
+          }
+          return;
+        }
+        // The whole peek was new — there may be more than a small peek can see, so fall through to a full fetch.
+      }
       const res = await fetchFn({ apiKey: app.settings.apifyApiKey, ref, maxResults: count });
       app.updateInspirationMedia(
         insp.id,
@@ -527,15 +591,7 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
           ? { tiktokVideos: res.videos, tiktokLastFetched: Date.now() }
           : { instagramVideos: res.videos, instagramLastFetched: Date.now() }
       );
-      app.logUsage({
-        feature: platform === "TikTok" ? "tiktok-fetch" : "instagram-fetch",
-        provider: "apify",
-        modelId: platform === "TikTok" ? "tiktok-scraper" : "instagram-reel-scraper",
-        modelLabel: platform === "TikTok" ? "TikTok fetch" : "Instagram fetch",
-        inputTokens: 0,
-        outputTokens: res.videos.length,
-        costUsd: res.videos.length * SOCIAL_FETCH_RATES[platform],
-      });
+      logFetchUsage(res.videos.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to fetch ${platform} videos.`);
     } finally {
@@ -575,6 +631,7 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
       )}
 
       {error && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{error}</div>}
+      {statusMessage && <div style={{ fontSize: 11, color: muted(60) }}>{statusMessage}</div>}
 
       {videos.length > 0 && (
         <div style={{ fontSize: 11, color: muted(55) }}>

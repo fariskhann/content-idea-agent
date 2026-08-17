@@ -47,13 +47,23 @@ function parseDurationSeconds(iso: string): number {
   return h * 3600 + m * 60 + s;
 }
 
-/** A real Short stays on /shorts/{id} (200); YouTube 303-redirects a regular video ID to /watch. No API quota used. */
+/**
+ * A real Short stays on /shorts/{id} (200); YouTube 303-redirects a regular video ID to /watch. No API quota used.
+ * Without a consent cookie, requests from EU/UK egress IPs get 302-redirected to consent.youtube.com before ever
+ * reaching that response, which would otherwise make every video look not-short — SOCS=CAI is the standard
+ * pre-consent bypass cookie, sent unconditionally since a non-EU/UK caller simply won't hit that wall anyway.
+ */
 async function isShort(videoId: string, durationSeconds: number): Promise<boolean> {
   if (durationSeconds > SHORTS_DURATION_CEILING) return false;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3500);
-    const res = await fetch(`https://www.youtube.com/shorts/${videoId}`, { method: "HEAD", redirect: "manual", signal: controller.signal });
+    const res = await fetch(`https://www.youtube.com/shorts/${videoId}`, {
+      method: "HEAD",
+      redirect: "manual",
+      signal: controller.signal,
+      headers: { Cookie: "SOCS=CAI" },
+    });
     clearTimeout(timeout);
     return res.status >= 200 && res.status < 300;
   } catch {
