@@ -216,10 +216,12 @@ export function FrameworksTab() {
           <textarea
             value={d.igTiktokAnalysisInstructions}
             onChange={(e) => app.setBrandField("igTiktokAnalysisInstructions")(e.target.value)}
-            placeholder="Not wired into a live AI call yet — neither platform has a public fetch API like YouTube's. Write instructions here now and they'll be ready whenever that gets built."
             rows={4}
             style={{ ...textarea, maxWidth: 640 }}
           />
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
+            Sent as-is on every Instagram/TikTok outlier analysis, right after the post list.
+          </div>
         </div>
       </div>
     </div>

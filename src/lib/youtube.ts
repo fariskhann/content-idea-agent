@@ -55,15 +55,27 @@ export interface TranscriptFetchResult {
   error?: string;
 }
 
-export async function fetchTranscript(videoId: string, apiKey: string): Promise<TranscriptFetchResult> {
-  if (!apiKey) return { status: "no_key" };
-  const params = new URLSearchParams({ videoId, apiKey });
-  const res = await fetch(`/api/youtube/transcript?${params.toString()}`);
+/** Shared response-parsing for /api/transcript, regardless of whether the caller passed a YouTube videoId or a raw TikTok/Instagram post url. */
+async function parseTranscriptResponse(res: Response): Promise<TranscriptFetchResult> {
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) return { status: "invalid_key", error: data?.error };
   if (res.status === 429) return { status: "quota_exceeded", error: data?.error };
   if (!res.ok) return { status: "error", error: data?.error || `Failed to fetch transcript (${res.status}).` };
   return { status: data.status === "ok" ? "ok" : "unavailable", text: data.text };
+}
+
+export async function fetchTranscript(videoId: string, apiKey: string): Promise<TranscriptFetchResult> {
+  if (!apiKey) return { status: "no_key" };
+  const params = new URLSearchParams({ videoId, apiKey });
+  const res = await fetch(`/api/transcript?${params.toString()}`);
+  return parseTranscriptResponse(res);
+}
+
+export async function fetchUrlTranscript(url: string, apiKey: string): Promise<TranscriptFetchResult> {
+  if (!apiKey) return { status: "no_key" };
+  const params = new URLSearchParams({ url, apiKey });
+  const res = await fetch(`/api/transcript?${params.toString()}`);
+  return parseTranscriptResponse(res);
 }
 
 export const DEFAULT_YOUTUBE_ANALYSIS_INSTRUCTIONS =

@@ -8,9 +8,17 @@ import { complete, parseJsonArray } from "@/lib/ai";
 import { getModel, costUsd, providerLabel } from "@/lib/models";
 import { genId } from "@/lib/id";
 import { computeOutliers, DEFAULT_VIDEO_COUNT, MAX_VIDEO_COUNT, REFRESH_PEEK_COUNT, findNewItems, fetchChannelVideos, fetchTranscript, buildYoutubeAnalysisPrompt, buildDistillationPrompt } from "@/lib/youtube";
-import { fetchTikTokVideos, fetchInstagramVideos, SOCIAL_FETCH_RATES } from "@/lib/socialVideos";
+import {
+  fetchTikTokVideos,
+  fetchInstagramVideos,
+  fetchSocialTranscript,
+  buildSocialAnalysisPrompt,
+  buildSocialDistillationPrompt,
+  SOCIAL_FETCH_RATES,
+  type SocialDistillationTarget,
+} from "@/lib/socialVideos";
 import { toPlatformGroup } from "@/lib/platform";
-import type { AnalysisField as AnalysisFieldType, Inspiration, LibraryEntry, SocialPlatformKind, SocialVideo, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
+import type { AnalysisField as AnalysisFieldType, Inspiration, LibraryEntry, SocialOutlierResult, SocialPlatformKind, SocialVideo, YoutubeOutlierResult, YoutubeVideo } from "@/lib/types";
 
 function platformLabel(p: Inspiration["platform"]): string {
   return p;
@@ -512,20 +520,54 @@ function YoutubeSection({ insp }: { insp: Inspiration }) {
   );
 }
 
-/** Fetch-and-list only (no analysis/transcripts/library — that's a deferred follow-up), covering both TikTok and Instagram since the fetch-step UI is nearly identical between them. */
+/** Covers both TikTok and Instagram since the fetch/analysis/library UI is nearly identical between them, differing only in which platform-specific fields/functions get used. Unlike YouTube's cards, these stay always-expanded — short-form captions/analysis are compact enough that a minimize/collapse toggle isn't worth the extra interaction. */
 function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: SocialPlatformKind }) {
   const app = useApp();
   const [count, setCount] = useState(DEFAULT_VIDEO_COUNT);
   const [fetching, setFetching] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [distilling, setDistilling] = useState(false);
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [expandedTranscriptIds, setExpandedTranscriptIds] = useState<Set<string>>(new Set());
+
+  function toggleTranscriptExpanded(id: string) {
+    setExpandedTranscriptIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const videos: SocialVideo[] = (platform === "TikTok" ? insp.tiktokVideos : insp.instagramVideos) || [];
   const { avgViews, outliers } = computeOutliers(videos);
   const outlierIds = new Set(outliers.map((v) => v.id));
+  const platformAnalysis = platform === "TikTok" ? insp.tiktokAnalysis : insp.instagramAnalysis;
+  const analysisById = new Map<string, SocialOutlierResult>((platformAnalysis?.results || []).map((r) => [r.videoId, r]));
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  // Reset the selection (not the outlier highlighting) each time a fresh fetch lands.
+  const lastFetched = platform === "TikTok" ? insp.tiktokLastFetched : insp.instagramLastFetched;
+  const [lastSeenFetch, setLastSeenFetch] = useState(lastFetched);
+  if (lastSeenFetch !== lastFetched) {
+    setLastSeenFetch(lastFetched);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function logFetchUsage(resultCount: number) {
+    const costUsd = resultCount * SOCIAL_FETCH_RATES[platform];
     app.logUsage({
       feature: platform === "TikTok" ? "tiktok-fetch" : "instagram-fetch",
       provider: "apify",
@@ -533,8 +575,9 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
       modelLabel: platform === "TikTok" ? "TikTok fetch" : "Instagram fetch",
       inputTokens: 0,
       outputTokens: resultCount,
-      costUsd: resultCount * SOCIAL_FETCH_RATES[platform],
+      costUsd,
     });
+    app.logApifySpend(costUsd);
   }
 
   async function handleFetch() {
@@ -600,6 +643,180 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
     }
   }
 
+  /** Shared by the batch "Analyse videos" button and the per-video re-analyse icon. A transcript already marked "ok" is never re-fetched; "unavailable"/"not_fetched" always gets another attempt, since a missing transcript should only ever be a temporary state, not a permanent skip. */
+  async function runSocialAnalysis(targetVideos: SocialVideo[]) {
+    setError("");
+    const selectedModel = getModel(app.data.aiModel);
+    const hasKey = selectedModel.provider === "anthropic" ? !!app.settings.anthropicApiKey : !!app.settings.deepseekApiKey;
+    if (!hasKey) {
+      setError(`Add your ${providerLabel(selectedModel.provider)} API key in Settings first.`);
+      return;
+    }
+    if (!targetVideos.length) {
+      setError("Tick at least one video to analyze.");
+      return;
+    }
+    setAnalyzing(true);
+    try {
+      const updatedVideos = [...videos];
+      const withTranscripts: SocialVideo[] = [];
+      let transcriptWarning = "";
+      let stopFetchingTranscripts = false;
+      for (const selected of targetVideos) {
+        let current = selected;
+        if (!stopFetchingTranscripts && current.transcriptStatus !== "ok") {
+          const result = await fetchSocialTranscript(current.url, app.settings.supadataApiKey);
+          if (result.status === "ok" || result.status === "unavailable") {
+            // Both outcomes reached Supadata and likely consumed a credit — only no_key/invalid_key/quota_exceeded don't.
+            app.logTranscriptFetch();
+            current = { ...current, transcript: result.text, transcriptStatus: result.status };
+          } else {
+            stopFetchingTranscripts = true;
+            transcriptWarning =
+              result.status === "no_key"
+                ? "Add your Supadata API key in Settings to include transcripts — continuing without them."
+                : result.status === "quota_exceeded"
+                  ? "Supadata free-tier limit reached for this cycle — continuing without transcripts."
+                  : (result.error || "Transcript fetch failed — continuing without transcripts.");
+          }
+          const idx = updatedVideos.findIndex((v) => v.id === current.id);
+          if (idx !== -1) updatedVideos[idx] = current;
+        }
+        withTranscripts.push(current);
+      }
+      app.updateInspirationMedia(insp.id, platform === "TikTok" ? { tiktokVideos: updatedVideos } : { instagramVideos: updatedVideos });
+      if (transcriptWarning) setError(transcriptWarning);
+
+      const prompt = buildSocialAnalysisPrompt(app.data, insp.name || insp.handle, platform, avgViews, withTranscripts);
+      const model = getModel(app.data.aiModel);
+      const { text, usage } = await complete({
+        model,
+        apiKeys: { anthropicApiKey: app.settings.anthropicApiKey, deepseekApiKey: app.settings.deepseekApiKey },
+        prompt,
+        maxTokens: Math.min(60000, Math.max(20000, withTranscripts.length * 6000)),
+      });
+      app.logUsage({
+        feature: platform === "TikTok" ? "tiktok-analysis" : "instagram-analysis",
+        provider: model.provider,
+        modelId: model.id,
+        modelLabel: model.label,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+      });
+      const parsed = parseJsonArray(text) as Record<string, unknown>[] | null;
+      if (!parsed || !parsed.length) {
+        console.error(`${platform} analysis: failed to parse model response as JSON array. Raw response:`, text);
+        const looksTruncated = text.trim().length > 0 && !text.trim().endsWith("]") && !text.trim().endsWith("}");
+        if (looksTruncated) {
+          throw new Error("The model's response was cut off before finishing — try analyzing fewer videos at once.");
+        }
+        const snippet = text.length > 300 ? text.slice(0, 300) + "…" : text;
+        throw new Error(`Unexpected response format — model didn't return valid JSON. Raw response: "${snippet}"`);
+      }
+      const newResults: SocialOutlierResult[] = parsed.map((p) => {
+        const { videoId, ...fields } = p;
+        return { videoId: typeof videoId === "string" ? videoId : "", fields: fields as Record<string, AnalysisFieldType> };
+      });
+      // Merge rather than replace, so re-analysing one video (or a partial batch) doesn't wipe out results for videos not in this run.
+      const newIds = new Set(newResults.map((r) => r.videoId));
+      const mergedResults = [...(platformAnalysis?.results || []).filter((r) => !newIds.has(r.videoId)), ...newResults];
+      const generatedAt = Date.now();
+      app.updateInspirationMedia(
+        insp.id,
+        platform === "TikTok" ? { tiktokAnalysis: { generatedAt, avgViews, results: mergedResults } } : { instagramAnalysis: { generatedAt, avgViews, results: mergedResults } }
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Analysis failed — try again.");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function handleAnalyze() {
+    await runSocialAnalysis(videos.filter((v) => selectedIds.has(v.id)));
+  }
+
+  async function handleReanalyzeOne(id: string) {
+    const video = videos.find((v) => v.id === id);
+    if (video) await runSocialAnalysis([video]);
+  }
+
+  /** Clears cached transcript status/text and any prior AI notes so the next analyze run starts clean. */
+  function handleReset() {
+    const resetVideos = videos.map((v) => ({ ...v, transcript: undefined, transcriptStatus: "not_fetched" as const }));
+    app.updateInspirationMedia(
+      insp.id,
+      platform === "TikTok" ? { tiktokVideos: resetVideos, tiktokAnalysis: undefined } : { instagramVideos: resetVideos, instagramAnalysis: undefined }
+    );
+    setError("");
+  }
+
+  const selectedAnalysedVideos = videos.filter((v) => selectedIds.has(v.id) && analysisById.has(v.id));
+
+  /** Distills the selected, already-analysed videos into durable library entries — a separate, opt-in AI call, never run automatically after Analyse. */
+  async function handleAddToLibrary() {
+    setError("");
+    if (!selectedAnalysedVideos.length) return;
+    const selectedModel = getModel(app.data.aiModel);
+    const hasKey = selectedModel.provider === "anthropic" ? !!app.settings.anthropicApiKey : !!app.settings.deepseekApiKey;
+    if (!hasKey) {
+      setError(`Add your ${providerLabel(selectedModel.provider)} API key in Settings first.`);
+      return;
+    }
+    setDistilling(true);
+    try {
+      const platformCategories = app.data.categories.filter((c) => c.platform === toPlatformGroup(insp.platform));
+      const targets: SocialDistillationTarget[] = selectedAnalysedVideos.map((video) => ({ video, result: analysisById.get(video.id)! }));
+      const prompt = buildSocialDistillationPrompt(app.data, insp.name || insp.handle, platform, platformCategories, targets);
+      const model = getModel(app.data.aiModel);
+      const { text, usage } = await complete({
+        model,
+        apiKeys: { anthropicApiKey: app.settings.anthropicApiKey, deepseekApiKey: app.settings.deepseekApiKey },
+        prompt,
+        maxTokens: Math.min(8000, 1000 + targets.length * 400),
+      });
+      app.logUsage({
+        feature: "library-distill",
+        provider: model.provider,
+        modelId: model.id,
+        modelLabel: model.label,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+      });
+      const parsed = parseJsonArray(text) as Record<string, unknown>[] | null;
+      if (!parsed || !parsed.length) throw new Error("Unexpected response format — try again.");
+      const newEntries: LibraryEntry[] = parsed
+        .map((p) => {
+          const names = Array.isArray(p.categoryNames) ? (p.categoryNames as unknown[]) : [];
+          const categoryIds = names
+            .map((n) => platformCategories.find((c) => c.name.trim().toLowerCase() === String(n).trim().toLowerCase())?.id)
+            .filter((id): id is string => !!id);
+          const videoIds = Array.isArray(p.videoIds) ? (p.videoIds as unknown[]).filter((v): v is string => typeof v === "string") : [];
+          const now = Date.now();
+          return {
+            id: genId(),
+            categoryIds,
+            platform: toPlatformGroup(insp.platform),
+            text: String(p.text || "").trim(),
+            sourceInspirationId: insp.id,
+            sourceInspirationName: insp.name || insp.handle,
+            sourceVideoIds: videoIds,
+            createdAt: now,
+            updatedAt: now,
+          };
+        })
+        .filter((e) => e.text);
+      if (!newEntries.length) throw new Error("The model didn't return any usable learnings — try again.");
+      app.addLibraryEntries(newEntries);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Adding to library failed — try again.");
+    } finally {
+      setDistilling(false);
+    }
+  }
+
   return (
     <div style={{ borderTop: `1px solid ${muted(25)}`, marginTop: 8, paddingTop: 18, display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>{platform} videos</div>
@@ -622,6 +839,35 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
         >
           {fetching ? `Fetching… (${elapsedSeconds}s)` : videos.length ? "Refresh videos" : "Fetch videos"}
         </button>
+        {videos.length > 0 && (
+          <button
+            onClick={handleAnalyze}
+            disabled={analyzing || selectedIds.size === 0}
+            style={{ border: "1px solid var(--color-accent)", background: "var(--color-accent)", color: "var(--color-bg)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            {analyzing ? "Analysing…" : `Analyse videos (${selectedIds.size})`}
+          </button>
+        )}
+        {videos.length > 0 && (
+          <button
+            onClick={handleAddToLibrary}
+            disabled={distilling || selectedAnalysedVideos.length === 0}
+            title="Distills the selected, already-analysed videos into durable library entries — a separate AI call, not run automatically after Analyse."
+            style={{ border: `1px solid ${muted(35)}`, background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            {distilling ? "Adding…" : `Add to library (${selectedAnalysedVideos.length})`}
+          </button>
+        )}
+        {videos.length > 0 && (
+          <button
+            onClick={handleReset}
+            disabled={analyzing || fetching}
+            title="Clears cached transcript status and AI notes so the next analysis re-fetches and re-analyzes from scratch."
+            style={{ border: `1px solid ${muted(35)}`, background: "transparent", color: muted(70), padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            Reset
+          </button>
+        )}
       </div>
 
       {fetching && (
@@ -647,6 +893,7 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10 }}>
           {videos.map((v) => {
             const isOutlier = outlierIds.has(v.id);
+            const analysis = analysisById.get(v.id);
             return (
               <div
                 key={v.id}
@@ -657,13 +904,41 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={v.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} className="grayscale" />
                   )}
-                  {isOutlier && (
-                    <span
-                      style={{ position: "absolute", top: 5, right: 5, fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "1px 6px", whiteSpace: "nowrap" }}
-                    >
-                      Outlier
-                    </span>
-                  )}
+                  <div style={{ position: "absolute", top: 5, left: 5, display: "flex", flexDirection: "row", gap: 3, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(v.id)}
+                      onChange={() => toggleSelected(v.id)}
+                      style={{ accentColor: "var(--color-accent)", width: 15, height: 15, display: "block" }}
+                    />
+                    {analysis && (
+                      <button
+                        onClick={() => handleReanalyzeOne(v.id)}
+                        disabled={analyzing}
+                        title="Analyse again — reuses the existing transcript and picks up any changes to Analysis instructions"
+                        style={{
+                          border: "none",
+                          background: "rgba(255,255,255,0.9)",
+                          width: 15,
+                          height: 15,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 0,
+                          color: muted(70),
+                          cursor: analyzing ? "default" : "pointer",
+                          fontSize: 11,
+                          lineHeight: 1,
+                        }}
+                      >
+                        ↻
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ position: "absolute", top: 5, right: 5, display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
+                    {isOutlier && <span style={{ fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "1px 6px", whiteSpace: "nowrap" }}>Outlier</span>}
+                    {analysis && <span style={{ fontSize: 10, background: "var(--color-neutral-100)", color: "var(--color-neutral-800)", padding: "1px 6px", whiteSpace: "nowrap" }}>Analysed</span>}
+                  </div>
                 </div>
                 <div style={{ padding: "8px 5px 8px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
                   <span style={{ fontSize: 12, color: "var(--color-text)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
@@ -677,6 +952,45 @@ function SocialVideoSection({ insp, platform }: { insp: Inspiration; platform: S
                     <a href={v.url} target="_blank" rel="noopener" style={{ fontSize: 11 }}>
                       View ↗
                     </a>
+                  )}
+                  {v.transcriptStatus !== "not_fetched" && (
+                    <div style={{ fontSize: 11, color: muted(55) }}>
+                      {v.transcriptStatus === "unavailable" && "No transcript available"}
+                      {v.transcriptStatus === "ok" && v.transcript && (
+                        <button
+                          onClick={() => toggleTranscriptExpanded(v.id)}
+                          style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--color-accent-800)", textDecoration: "underline", cursor: "pointer" }}
+                        >
+                          {expandedTranscriptIds.has(v.id) ? "hide transcript" : `view transcript (${v.transcript.length.toLocaleString()} chars)`}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {v.transcriptStatus === "ok" && v.transcript && expandedTranscriptIds.has(v.id) && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        lineHeight: 1.5,
+                        color: muted(70),
+                        maxHeight: 180,
+                        overflowY: "auto",
+                        background: "var(--color-bg)",
+                        border: `1px solid ${muted(15)}`,
+                        padding: 8,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {v.transcript}
+                    </div>
+                  )}
+                  {analysis && (
+                    <div style={{ fontSize: 12, color: "var(--color-text)" }}>
+                      {Object.entries(analysis.fields || {}).map(([key, value]) => (
+                        <div key={key}>
+                          <strong>{labelFromKey(key)}:</strong> <AnalysisFieldView value={value} />
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
@@ -753,7 +1067,9 @@ function InspirationDetail({ insp }: { insp: Inspiration }) {
           onReset={() =>
             app.updateInspirationMedia(
               insp.id,
-              insp.platform === "TikTok" ? { tiktokVideos: [], tiktokLastFetched: undefined } : { instagramVideos: [], instagramLastFetched: undefined }
+              insp.platform === "TikTok"
+                ? { tiktokVideos: [], tiktokLastFetched: undefined, tiktokAnalysis: undefined }
+                : { instagramVideos: [], instagramLastFetched: undefined, instagramAnalysis: undefined }
             )
           }
         >
@@ -787,8 +1103,8 @@ export function InspirationTab() {
         <div>
           <h1 style={pageTitle}>Inspiration</h1>
           <p style={{ ...pageSubtitle, margin: 0 }}>
-            Pages, creators, or competitors worth tracking. For YouTube channels, pull recent videos, flag which ones outperformed the channel&apos;s own
-            baseline, and distill the good ones into your Library.
+            Pages, creators, or competitors worth tracking. Pull recent videos, flag which ones outperformed the account&apos;s own baseline, and distill the
+            good ones into your Library.
           </p>
         </div>
         <button onClick={handleAdd} style={{ flexShrink: 0, ...primaryBtn, padding: "11px 18px", fontSize: 13 }}>

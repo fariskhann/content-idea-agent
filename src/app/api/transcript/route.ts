@@ -8,12 +8,13 @@ interface SupadataContentSegment {
 
 export async function GET(req: NextRequest) {
   const videoId = req.nextUrl.searchParams.get("videoId") || "";
+  const rawUrl = req.nextUrl.searchParams.get("url") || "";
   const apiKey = req.nextUrl.searchParams.get("apiKey") || "";
-  if (!videoId) return NextResponse.json({ error: "Missing videoId." }, { status: 400 });
+  const url = videoId ? `https://www.youtube.com/watch?v=${videoId}` : rawUrl;
+  if (!url) return NextResponse.json({ error: "Missing videoId or url." }, { status: 400 });
   if (!apiKey) return NextResponse.json({ error: "Missing Supadata API key." }, { status: 400 });
 
   try {
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
     const res = await fetch(`https://api.supadata.ai/v1/transcript?url=${encodeURIComponent(url)}`, {
       headers: { "x-api-key": apiKey },
     });

@@ -5,6 +5,7 @@ import { useApp } from "@/lib/AppContext";
 import { input, kicker, muted, primaryBtn, secondaryBtn } from "@/lib/styles";
 import { MODELS, providerLabel } from "@/lib/models";
 import { computeSupadataUsage } from "@/lib/transcriptUsage";
+import { computeApifyUsage, type ApifyLogEntry } from "@/lib/apifyUsage";
 
 /** "sk-ant-a1b2c3...9xYz" — never the full key, just enough to confirm you pasted the right one. */
 function maskKeyPreview(key: string): string {
@@ -135,6 +136,63 @@ function SupadataKeyField({
   );
 }
 
+function ApifyKeyField({
+  label,
+  hint,
+  value,
+  resetDay,
+  log,
+  onChangeKey,
+  onChangeResetDay,
+  inputId,
+  revealed,
+  onToggleReveal,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  resetDay: number;
+  log: ApifyLogEntry[];
+  onChangeKey: (v: string) => void;
+  onChangeResetDay: (v: number) => void;
+  inputId: string;
+  revealed: boolean;
+  onToggleReveal: () => void;
+}) {
+  const usage = computeApifyUsage(log, resetDay);
+  return (
+    <div>
+      <div style={kicker}>{label}</div>
+      <KeyInput value={value} onChange={onChangeKey} placeholder="apify_api_..." revealed={revealed} onToggleReveal={onToggleReveal} />
+      <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>{hint}</div>
+      {value && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 8, padding: "8px 10px", background: "var(--color-surface)" }}>
+          <div style={{ fontSize: 12 }}>
+            <strong>
+              ${usage.usedUsd.toFixed(2)} / ${usage.limitUsd.toFixed(2)}
+            </strong>{" "}
+            spent this cycle · resets in {usage.daysUntilReset}d ({usage.resetDate.toLocaleDateString()})
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+            <label htmlFor={inputId} style={{ fontSize: 11, color: muted(55) }}>
+              Renews on day
+            </label>
+            <input
+              id={inputId}
+              type="number"
+              min={1}
+              max={28}
+              value={resetDay || 1}
+              onChange={(e) => onChangeResetDay(Math.min(Math.max(Number(e.target.value) || 1, 1), 28))}
+              style={{ ...input, width: 56, padding: "4px 6px" }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SettingsDialog() {
   const app = useApp();
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
@@ -226,17 +284,44 @@ export function SettingsDialog() {
           </div>
         </div>
 
-        <div>
-          <div style={kicker}>Apify API token</div>
-          <KeyInput
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, border: `1px solid ${muted(20)}` }}>
+          <ApifyKeyField
+            label="Apify API token (primary)"
+            hint="Used to pull TikTok and Instagram video lists in Inspiration — only this token is ever called."
             value={app.settings.apifyApiKey}
-            onChange={(v) => app.updateSettings({ apifyApiKey: v })}
-            placeholder="apify_api_..."
-            revealed={!!revealed.apify}
-            onToggleReveal={() => toggleReveal("apify")}
+            resetDay={app.settings.apifyResetDay}
+            log={app.apifyLog}
+            onChangeKey={(v) => app.updateSettings({ apifyApiKey: v })}
+            onChangeResetDay={(v) => app.updateSettings({ apifyResetDay: v })}
+            inputId="apify-reset-day"
+            revealed={!!revealed.apifyPrimary}
+            onToggleReveal={() => toggleReveal("apifyPrimary")}
           />
-          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
-            One account-level token — used to pull TikTok and Instagram video lists in Inspiration.
+
+          <button
+            onClick={app.swapApifyKeys}
+            title="Swaps the primary and backup tokens, along with each one's own spend tracking"
+            style={{ ...secondaryBtn, alignSelf: "flex-start", fontSize: 12, padding: "6px 12px" }}
+          >
+            ⇄ Swap primary / backup
+          </button>
+
+          <ApifyKeyField
+            label="Apify API token (backup)"
+            hint="A second account kept on standby. Not used for calls until you swap it into the primary slot above."
+            value={app.settings.apifyBackupApiKey}
+            resetDay={app.settings.apifyBackupResetDay}
+            log={app.apifyBackupLog}
+            onChangeKey={(v) => app.updateSettings({ apifyBackupApiKey: v })}
+            onChangeResetDay={(v) => app.updateSettings({ apifyBackupResetDay: v })}
+            inputId="apify-backup-reset-day"
+            revealed={!!revealed.apifyBackup}
+            onToggleReveal={() => toggleReveal("apifyBackup")}
+          />
+
+          <div style={{ fontSize: 11, color: muted(50) }}>
+            Spend is estimated locally from each fetch&apos;s per-result pricing, not Apify&apos;s live invoice — set &quot;renews on day&quot; to match
+            each account&apos;s actual billing date for accuracy.
           </div>
         </div>
 

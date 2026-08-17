@@ -92,6 +92,20 @@ export interface SocialVideo {
   publishedAt: string;
   /** TikTok/IG URLs aren't reconstructable from id alone the way a YouTube URL is, so store it directly. */
   url: string;
+  transcript?: string;
+  transcriptStatus: TranscriptStatus;
+}
+
+export interface SocialOutlierResult {
+  videoId: string;
+  /** Arbitrary key -> analysis content, shaped entirely by the user's custom Analysis instructions (no fixed "why"/"borrow" schema). */
+  fields: Record<string, AnalysisField>;
+}
+
+export interface SocialAnalysis {
+  generatedAt: number;
+  avgViews: number;
+  results: SocialOutlierResult[];
 }
 
 export interface Inspiration {
@@ -107,8 +121,10 @@ export interface Inspiration {
   youtubeAnalysis?: YoutubeAnalysis;
   tiktokVideos?: SocialVideo[];
   tiktokLastFetched?: number;
+  tiktokAnalysis?: SocialAnalysis;
   instagramVideos?: SocialVideo[];
   instagramLastFetched?: number;
+  instagramAnalysis?: SocialAnalysis;
 }
 
 export interface LibraryEntry {
@@ -155,7 +171,7 @@ export interface AppData {
   genBatchSize: number;
   /** Editable instructions sent to the AI when analyzing YouTube inspiration videos — see Frameworks. */
   youtubeAnalysisInstructions: string;
-  /** Editable instructions for Instagram/TikTok inspiration analysis — not wired into a live AI call yet (no public fetch API for either). */
+  /** Editable instructions sent to the AI when analyzing Instagram/TikTok inspiration videos — see Frameworks. */
   igTiktokAnalysisInstructions: string;
   categories: Category[];
   hooks: TextItem[];

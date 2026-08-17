@@ -39,6 +39,7 @@ function normalize(item: RawInstagramItem): SocialVideo {
     commentCount: item.commentsCount ?? 0,
     publishedAt: item.timestamp || "",
     url: item.url || (item.shortCode ? `https://www.instagram.com/reel/${item.shortCode}/` : ""),
+    transcriptStatus: "not_fetched",
   };
 }
 

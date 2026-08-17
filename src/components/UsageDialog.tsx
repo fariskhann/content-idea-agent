@@ -13,6 +13,8 @@ const FEATURE_LABEL: Record<string, string> = {
   "library-distill": "Library distill",
   "tiktok-fetch": "TikTok fetch",
   "instagram-fetch": "Instagram fetch",
+  "tiktok-analysis": "TikTok analysis",
+  "instagram-analysis": "Instagram analysis",
 };
 
 export function UsageDialog() {

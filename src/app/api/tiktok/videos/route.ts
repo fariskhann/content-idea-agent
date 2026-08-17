@@ -44,6 +44,7 @@ function normalize(item: RawTikTokItem): SocialVideo {
     shareCount: item.shareCount,
     publishedAt,
     url: item.webVideoUrl || item.videoUrl || "",
+    transcriptStatus: "not_fetched",
   };
 }
 

@@ -3,7 +3,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { genId } from "./id";
 import { defaultSeed } from "./seed";
-import { loadSettings, type Settings } from "./settings";
+import { loadSettings, empty as defaultSettings, type Settings } from "./settings";
 import {
   buildAiGeneratePromptForCategory,
   buildAiGeneratePromptGeneric,
@@ -16,8 +16,9 @@ import { complete, parseJsonArray, parseJsonObject } from "./ai";
 import { getModel, costUsd } from "./models";
 import { loadUsageLog, type UsageLogEntry } from "./usage";
 import { loadTranscriptLog, loadTranscriptBackupLog } from "./transcriptUsage";
+import type { ApifyLogEntry } from "./apifyUsage";
 import { supabase } from "./supabaseClient";
-import { fetchUserRow, insertUserRow, updateAppData, updateSettingsRow, updateUsageLog, updateTranscriptLogs, type UserDataRow } from "./db";
+import { fetchUserRow, insertUserRow, updateAppData, updateSettingsRow, updateUsageLog, updateTranscriptLogs, updateApifyLogs, type UserDataRow } from "./db";
 import type {
   AppData,
   Category,
@@ -120,6 +121,8 @@ interface AppState {
   usageDialogOpen: boolean;
   transcriptLog: number[];
   transcriptBackupLog: number[];
+  apifyLog: ApifyLogEntry[];
+  apifyBackupLog: ApifyLogEntry[];
 }
 
 function initialAppState(): AppState {
@@ -149,6 +152,9 @@ function initialAppState(): AppState {
       deepseekApiKey: "",
       youtubeApiKey: "",
       apifyApiKey: "",
+      apifyResetDay: 0,
+      apifyBackupApiKey: "",
+      apifyBackupResetDay: 0,
       supadataApiKey: "",
       supadataResetDay: 0,
       supadataBackupApiKey: "",
@@ -159,6 +165,8 @@ function initialAppState(): AppState {
     usageDialogOpen: false,
     transcriptLog: [],
     transcriptBackupLog: [],
+    apifyLog: [],
+    apifyBackupLog: [],
   };
 }
 
@@ -267,6 +275,8 @@ function useAppStore() {
           usage_log: loadUsageLog(),
           transcript_log: loadTranscriptLog(),
           transcript_backup_log: loadTranscriptBackupLog(),
+          apify_log: [],
+          apify_backup_log: [],
         };
         try {
           await insertUserRow(user.id, row);
@@ -280,10 +290,12 @@ function useAppStore() {
       setState((s) => ({
         ...s,
         data: { ...s.data, ...normalizePlatformGroups(row!.app_data) },
-        settings: row!.settings,
+        settings: { ...defaultSettings, ...row!.settings },
         usageLog: row!.usage_log,
-        transcriptLog: row!.transcript_log,
-        transcriptBackupLog: row!.transcript_backup_log,
+        transcriptLog: row!.transcript_log ?? [],
+        transcriptBackupLog: row!.transcript_backup_log ?? [],
+        apifyLog: row!.apify_log ?? [],
+        apifyBackupLog: row!.apify_backup_log ?? [],
       }));
       setHydrated(true);
     })();
@@ -527,6 +539,15 @@ function useAppStore() {
       const transcriptLog = [...s.transcriptLog, Date.now()].slice(-1000);
       if (userIdRef.current) updateTranscriptLogs(userIdRef.current, transcriptLog, s.transcriptBackupLog).catch(() => {});
       return { ...s, transcriptLog };
+    });
+  }, []);
+
+  /** Logs one Apify call's estimated cost against the local per-key cycle estimate shown in Settings. Call in addition to logUsage(), not instead of it. */
+  const logApifySpend = useCallback((costUsd: number) => {
+    setState((s) => {
+      const apifyLog = [...s.apifyLog, { ts: Date.now(), costUsd }].slice(-1000);
+      if (userIdRef.current) updateApifyLogs(userIdRef.current, apifyLog, s.apifyBackupLog).catch(() => {});
+      return { ...s, apifyLog };
     });
   }, []);
 
@@ -845,6 +866,12 @@ function useAppStore() {
       if (patch.supadataBackupApiKey && !s.settings.supadataBackupApiKey && !settings.supadataBackupResetDay) {
         settings.supadataBackupResetDay = Math.min(new Date().getDate(), 28);
       }
+      if (patch.apifyApiKey && !s.settings.apifyApiKey && !settings.apifyResetDay) {
+        settings.apifyResetDay = Math.min(new Date().getDate(), 28);
+      }
+      if (patch.apifyBackupApiKey && !s.settings.apifyBackupApiKey && !settings.apifyBackupResetDay) {
+        settings.apifyBackupResetDay = Math.min(new Date().getDate(), 28);
+      }
       persistSettings(settings);
       return { ...s, settings };
     });
@@ -874,6 +901,31 @@ function useAppStore() {
         updateTranscriptLogs(userIdRef.current, transcriptLog, transcriptBackupLog).catch(() => {});
       }
       return { ...s, settings, transcriptLog, transcriptBackupLog };
+    });
+  }, []);
+
+  /** Swaps the primary and backup Apify keys, along with their reset-day settings and estimated-spend logs — the log always stays attached to its actual key, and only the primary key is ever used for calls. */
+  const swapApifyKeys = useCallback(() => {
+    if (settingsTimerRef.current) {
+      clearTimeout(settingsTimerRef.current);
+      settingsTimerRef.current = null;
+      pendingSettingsRef.current = null;
+    }
+    setState((s) => {
+      const settings: Settings = {
+        ...s.settings,
+        apifyApiKey: s.settings.apifyBackupApiKey,
+        apifyBackupApiKey: s.settings.apifyApiKey,
+        apifyResetDay: s.settings.apifyBackupResetDay,
+        apifyBackupResetDay: s.settings.apifyResetDay,
+      };
+      const apifyLog = s.apifyBackupLog;
+      const apifyBackupLog = s.apifyLog;
+      if (userIdRef.current) {
+        updateSettingsRow(userIdRef.current, settings).catch(() => {});
+        updateApifyLogs(userIdRef.current, apifyLog, apifyBackupLog).catch(() => {});
+      }
+      return { ...s, settings, apifyLog, apifyBackupLog };
     });
   }, []);
 
@@ -962,6 +1014,7 @@ function useAppStore() {
     updateSettings,
     setSettingsOpen,
     swapSupadataKeys,
+    swapApifyKeys,
     addLibraryEntries,
     updateLibraryEntryText,
     removeLibraryEntry,
@@ -970,6 +1023,7 @@ function useAppStore() {
     clearUsage,
     setUsageDialogOpen,
     logTranscriptFetch,
+    logApifySpend,
   };
 }
 
