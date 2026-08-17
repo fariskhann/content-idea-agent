@@ -12,7 +12,7 @@ import {
   buildSmartAiGeneratePromptGeneric,
   getGenerationPools,
 } from "./generation";
-import { complete, parseJsonArray } from "./ai";
+import { complete, parseJsonArray, parseJsonObject } from "./ai";
 import { getModel, costUsd } from "./models";
 import { loadUsageLog, type UsageLogEntry } from "./usage";
 import { loadTranscriptLog, loadTranscriptBackupLog } from "./transcriptUsage";
@@ -21,6 +21,7 @@ import { fetchUserRow, insertUserRow, updateAppData, updateSettingsRow, updateUs
 import type {
   AppData,
   Category,
+  GenerationBatch,
   Idea,
   IdeaStatus,
   Inspiration,
@@ -55,6 +56,31 @@ interface AiGenParsedItem {
   format?: string;
   structure?: string;
   platform?: Platform;
+  libraryRefs?: number[];
+}
+
+/** One AI-generated candidate awaiting approval, before it becomes a real Idea. */
+interface PendingCandidate {
+  tempId: string;
+  title: string;
+  hook: string;
+  notes: string;
+  format: string;
+  structure: string;
+  platform: Platform;
+  categoryId: string;
+  libraryEntryIds: string[];
+  approved: boolean;
+}
+
+/** A smart-mode generation result awaiting review — nothing here is persisted until commitGenerationBatch runs. */
+interface PendingGenerationBatch {
+  batchName: string;
+  candidates: PendingCandidate[];
+  categoryId: string;
+  platformGroup: PlatformGroup;
+  context: string;
+  max: number;
 }
 
 interface AppState {
@@ -66,11 +92,12 @@ interface AppState {
   activeBoardPlatform: "All" | "YouTube" | "IGTikTok";
   genContext: string;
   genSmartMode: boolean;
-  genSmartSummary: { generated: number; max: number } | null;
+  genPendingBatch: PendingGenerationBatch | null;
   generating: boolean;
   genError: string;
   justGenerated: boolean;
   expandedIds: Record<string, boolean>;
+  expandedSiblingIds: Record<string, boolean>;
   scriptGeneratingIds: Record<string, boolean>;
   scriptRegenOpenIds: Record<string, boolean>;
   scriptRegenNotes: Record<string, string>;
@@ -95,11 +122,12 @@ function initialAppState(): AppState {
     activeBoardPlatform: "All",
     genContext: "",
     genSmartMode: false,
-    genSmartSummary: null,
+    genPendingBatch: null,
     generating: false,
     genError: "",
     justGenerated: false,
     expandedIds: {},
+    expandedSiblingIds: {},
     scriptGeneratingIds: {},
     scriptRegenOpenIds: {},
     scriptRegenNotes: {},
@@ -436,6 +464,10 @@ function useAppStore() {
     (id: string) => setState((s) => ({ ...s, expandedCategoryIds: { ...s.expandedCategoryIds, [id]: !s.expandedCategoryIds[id] } })),
     []
   );
+  const toggleSiblingsExpand = useCallback(
+    (id: string) => setState((s) => ({ ...s, expandedSiblingIds: { ...s.expandedSiblingIds, [id]: !s.expandedSiblingIds[id] } })),
+    []
+  );
 
   // ---- script regen panel ----
   const openRegenPanel = useCallback((id: string) => setState((s) => ({ ...s, scriptRegenOpenIds: { ...s.scriptRegenOpenIds, [id]: true } })), []);
@@ -495,7 +527,7 @@ function useAppStore() {
       setState((s) => ({ ...s, genError: "Add a bit of context — rough is fine — so the AI can pick the right fit." }));
       return;
     }
-    setState((s) => ({ ...s, generating: true, genError: "", justGenerated: false, genSmartSummary: null }));
+    setState((s) => ({ ...s, generating: true, genError: "", justGenerated: false, genPendingBatch: null }));
     try {
       const cat = state.genCategory !== "all" ? d.categories.find((c) => c.id === state.genCategory) : null;
       const rounds = d.genBatchSize || 1;
@@ -505,11 +537,11 @@ function useAppStore() {
       const pickPlatform = (): Platform => (platformGroup === "YouTube" ? "YouTube" : "Instagram");
       const platformLabel = platformGroup === "YouTube" ? "YouTube" : "Instagram or TikTok";
 
-      const finishSuccess = (summary: { generated: number; max: number } | null) =>
-        setState((s) => ({ ...s, generating: false, justGenerated: true, genSmartSummary: summary }));
-
-      const composeSmartNotes = (p: AiGenParsedItem) =>
-        [p.notes || "", p.format ? "Format: " + p.format : "", p.structure ? "Structure: " + p.structure : ""].filter(Boolean).join(" — ");
+      const resolveLibraryRefs = (refs: unknown, entries: LibraryEntry[]): string[] => {
+        if (!Array.isArray(refs)) return [];
+        const ids = refs.map((n) => (typeof n === "number" ? entries[n - 1]?.id : undefined)).filter((id): id is string => !!id);
+        return Array.from(new Set(ids));
+      };
 
       if (cat && !smart) {
         const pools = getPoolsFor(cat);
@@ -541,9 +573,9 @@ function useAppStore() {
             notes: [p.notes || "", slot?.structureText ? "Structure: " + slot.structureText : ""].filter(Boolean).join(" — "),
           });
         });
-        finishSuccess(null);
+        setState((s) => ({ ...s, generating: false, justGenerated: true }));
       } else if (cat && smart) {
-        const prompt = buildSmartAiGeneratePromptForCategory(d, cat, platformLabel, state.genContext, rounds);
+        const { prompt, libraryEntries } = buildSmartAiGeneratePromptForCategory(d, cat, platformLabel, state.genContext, rounds);
         const { text, usage } = await complete({
           model,
           apiKeys,
@@ -559,19 +591,28 @@ function useAppStore() {
           outputTokens: usage.outputTokens,
           costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
         });
-        const parsed = parseJsonArray(text) as AiGenParsedItem[] | null;
-        if (!parsed) throw new Error("unexpected response format");
-        const capped = parsed.slice(0, rounds);
-        capped.forEach((p) => {
-          addIdea({
-            title: p.title || "Untitled idea",
-            hook: p.hook || "",
-            platform: pickPlatform(),
-            categoryId: cat.id,
-            notes: composeSmartNotes(p),
-          });
-        });
-        finishSuccess({ generated: capped.length, max: rounds });
+        const obj = parseJsonObject(text);
+        const ideasRaw = obj && Array.isArray(obj.ideas) ? (obj.ideas as AiGenParsedItem[]) : null;
+        if (!ideasRaw) throw new Error("unexpected response format");
+        const batchName = typeof obj!.batchName === "string" && (obj!.batchName as string).trim() ? (obj!.batchName as string).trim() : "Generated batch";
+        const capped = ideasRaw.slice(0, rounds);
+        const candidates: PendingCandidate[] = capped.map((p) => ({
+          tempId: genId(),
+          title: p.title || "Untitled idea",
+          hook: p.hook || "",
+          notes: p.notes || "",
+          format: p.format || "",
+          structure: p.structure || "",
+          platform: pickPlatform(),
+          categoryId: cat.id,
+          libraryEntryIds: resolveLibraryRefs(p.libraryRefs, libraryEntries),
+          approved: true,
+        }));
+        setState((s) => ({
+          ...s,
+          generating: false,
+          genPendingBatch: { batchName, candidates, categoryId: cat.id, platformGroup, context: state.genContext, max: rounds },
+        }));
       } else if (!cat && !smart) {
         const catsInGroup = d.categories.filter((c) => c.platform === platformGroup);
         const prompt = buildAiGeneratePromptGeneric(d, catsInGroup, getPoolsFor, platformLabel, state.genContext, rounds);
@@ -597,10 +638,10 @@ function useAppStore() {
             notes: p.notes || "",
           });
         });
-        finishSuccess(null);
+        setState((s) => ({ ...s, generating: false, justGenerated: true }));
       } else {
         const catsInGroup = d.categories.filter((c) => c.platform === platformGroup);
-        const prompt = buildSmartAiGeneratePromptGeneric(d, catsInGroup, platformLabel, state.genContext, rounds);
+        const { prompt, libraryEntries } = buildSmartAiGeneratePromptGeneric(d, catsInGroup, platformLabel, state.genContext, rounds);
         const { text, usage } = await complete({ model, apiKeys, prompt, maxTokens: Math.min(3000, 500 + rounds * 220) });
         logUsage({
           feature: "generate",
@@ -611,25 +652,89 @@ function useAppStore() {
           outputTokens: usage.outputTokens,
           costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
         });
-        const parsed = parseJsonArray(text) as AiGenParsedItem[] | null;
-        if (!parsed) throw new Error("unexpected response format");
-        const capped = parsed.slice(0, rounds);
-        capped.forEach((p) => {
+        const obj = parseJsonObject(text);
+        const ideasRaw = obj && Array.isArray(obj.ideas) ? (obj.ideas as AiGenParsedItem[]) : null;
+        if (!ideasRaw) throw new Error("unexpected response format");
+        const batchName = typeof obj!.batchName === "string" && (obj!.batchName as string).trim() ? (obj!.batchName as string).trim() : "Generated batch";
+        const capped = ideasRaw.slice(0, rounds);
+        const candidates: PendingCandidate[] = capped.map((p) => {
           const catMatch = catsInGroup.find((c) => c.name === p.category);
-          addIdea({
+          return {
+            tempId: genId(),
             title: p.title || "Untitled idea",
             hook: p.hook || "",
+            notes: p.notes || "",
+            format: p.format || "",
+            structure: p.structure || "",
             platform: p.platform || pickPlatform(),
             categoryId: catMatch ? catMatch.id : "",
-            notes: composeSmartNotes(p),
-          });
+            libraryEntryIds: resolveLibraryRefs(p.libraryRefs, libraryEntries),
+            approved: true,
+          };
         });
-        finishSuccess({ generated: capped.length, max: rounds });
+        setState((s) => ({
+          ...s,
+          generating: false,
+          genPendingBatch: { batchName, candidates, categoryId: "", platformGroup, context: state.genContext, max: rounds },
+        }));
       }
     } catch (err) {
       setState((s) => ({ ...s, generating: false, genError: "Generation failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" }));
     }
   }, [state.data, state.genCategory, state.genPlatformGroup, state.genContext, state.genSmartMode, state.settings.anthropicApiKey, state.settings.deepseekApiKey, getPoolsFor, addIdea, logUsage]);
+
+  // ---- pending generation batch review ----
+  const toggleCandidateApproval = useCallback((tempId: string) => {
+    setState((s) =>
+      s.genPendingBatch
+        ? { ...s, genPendingBatch: { ...s.genPendingBatch, candidates: s.genPendingBatch.candidates.map((c) => (c.tempId === tempId ? { ...c, approved: !c.approved } : c)) } }
+        : s
+    );
+  }, []);
+  const setAllCandidatesApproved = useCallback((approved: boolean) => {
+    setState((s) =>
+      s.genPendingBatch ? { ...s, genPendingBatch: { ...s.genPendingBatch, candidates: s.genPendingBatch.candidates.map((c) => ({ ...c, approved })) } } : s
+    );
+  }, []);
+  const discardPendingBatch = useCallback(() => setState((s) => ({ ...s, genPendingBatch: null })), []);
+  const commitGenerationBatch = useCallback(() => {
+    setState((s) => {
+      const pending = s.genPendingBatch;
+      if (!pending) return s;
+      const approved = pending.candidates.filter((c) => c.approved);
+      if (!approved.length) return { ...s, genPendingBatch: null };
+      const batchId = genId();
+      const now = Date.now();
+      const newIdeas: Idea[] = approved.map((c) => ({
+        id: genId(),
+        title: c.title,
+        hook: c.hook,
+        platform: c.platform,
+        categoryId: c.categoryId,
+        status: "idea",
+        notes: c.notes,
+        link: "",
+        script: "",
+        isDraft: true,
+        createdAt: now,
+        format: c.format || undefined,
+        structure: c.structure || undefined,
+        libraryEntryIds: c.libraryEntryIds.length ? c.libraryEntryIds : undefined,
+        batchId,
+      }));
+      const batch: GenerationBatch = {
+        id: batchId,
+        name: pending.batchName,
+        createdAt: now,
+        categoryId: pending.categoryId,
+        platformGroup: pending.platformGroup,
+        context: pending.context,
+      };
+      const data: AppData = { ...s.data, ideas: [...newIdeas, ...s.data.ideas], generationBatches: [batch, ...s.data.generationBatches] };
+      persist(data);
+      return { ...s, data, genPendingBatch: null, justGenerated: true };
+    });
+  }, [persist]);
 
   const generateScript = useCallback(
     async (id: string, instruction?: string) => {
@@ -815,6 +920,7 @@ function useAppStore() {
     deleteIdea,
     clearIdeas,
     toggleIdeaExpand,
+    toggleSiblingsExpand,
     toggleCategoryExpand,
     openRegenPanel,
     closeRegenPanel,
@@ -825,6 +931,10 @@ function useAppStore() {
     toggleStructureCheck,
     getPoolsFor,
     aiGenerate,
+    toggleCandidateApproval,
+    setAllCandidatesApproved,
+    discardPendingBatch,
+    commitGenerationBatch,
     generateScript,
     setActiveTab,
     goToBoard,

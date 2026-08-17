@@ -1,4 +1,4 @@
-import type { AppData, Angle, Category, Idea, TextItem } from "./types";
+import type { AppData, Angle, Category, Idea, LibraryEntry, TextItem } from "./types";
 
 /** Library candidate caps for "smart" (AI-picks-format) generation — noticeably wider than the rigid-mode caps below, since the model is trusted to select relevance itself rather than being handed a pre-filtered top-N. */
 const SMART_SINGLE_LIBRARY_CAP = 18;
@@ -116,8 +116,14 @@ export function buildAiGeneratePromptForCategory(
   return { prompt, slots };
 }
 
-/** Like buildAiGeneratePromptForCategory, but the AI picks its own format+structure fit per idea instead of being assigned one mechanically, draws on a wider pool of library learnings (using its own judgement on relevance), and returns as many well-fitting ideas as the context supports rather than a fixed count. */
-export function buildSmartAiGeneratePromptForCategory(data: AppData, cat: Category, platform: string, context: string, maxCount: number): string {
+/** Like buildAiGeneratePromptForCategory, but the AI picks its own format+structure fit per idea instead of being assigned one mechanically, draws on a wider pool of library learnings (citing which ones it actually used), and returns as many well-fitting ideas as the context supports rather than a fixed count — plus a short AI-written name for the batch. */
+export function buildSmartAiGeneratePromptForCategory(
+  data: AppData,
+  cat: Category,
+  platform: string,
+  context: string,
+  maxCount: number
+): { prompt: string; libraryEntries: LibraryEntry[] } {
   const hooksText = data.hooks.map((h) => h.text).join(", ");
   const existing = data.ideas
     .slice(0, 10)
@@ -145,8 +151,8 @@ export function buildSmartAiGeneratePromptForCategory(data: AppData, cat: Catego
     .slice(0, SMART_SINGLE_LIBRARY_CAP);
   if (libraryEntries.length)
     prompt +=
-      "Things we've learned from analysing inspiration for this content type (use only what's genuinely relevant to this specific idea — it's completely fine to use none of these, don't force a tenuous connection just to reference one):\n" +
-      libraryEntries.map((e) => "- " + e.text).join("\n") +
+      "Things we've learned from analysing inspiration for this content type (use only what's genuinely relevant to this specific idea — it's completely fine to use none of these, don't force a tenuous connection just to reference one; if you do use one, cite its number in libraryRefs):\n" +
+      libraryEntries.map((e, i) => "[" + (i + 1) + "] " + e.text).join("\n") +
       "\n\n";
   if (existing) prompt += "Ideas already logged (avoid repeating):\n" + existing + "\n\n";
   prompt += "Context from the user right now: " + context + "\n\n";
@@ -165,11 +171,11 @@ export function buildSmartAiGeneratePromptForCategory(data: AppData, cat: Catego
     maxCount +
     " — do not pad to reach that number. If nothing here fits the context well, it's fine to return fewer, or none at all." +
     (platform ? " Ideas are for " + platform + "." : "") +
-    ' Respond ONLY with a raw JSON array (no markdown fences, no commentary) of 0 to ' +
+    ' Respond ONLY with a raw JSON object (no markdown fences, no commentary) shaped like: {"batchName": a short 3-6 word name capturing the shared theme of this batch based on the context, "ideas": array of 0 to ' +
     maxCount +
-    ' objects, shaped like: {"title": short idea title, "hook": one opening line, "format": the exact name of the format you chose from the list above, "structure": the structure you followed (empty string if none applicable), "notes": one sentence on how to shoot it}. If nothing fits well, respond with an empty array [].';
+    ' objects, each shaped like: {"title": short idea title, "hook": one opening line, "format": the exact name of the format you chose from the list above, "structure": the structure you followed (empty string if none applicable), "notes": one sentence on how to shoot it, "libraryRefs": array of the bracketed learning numbers you genuinely drew from for this specific idea, or [] if none}}. If nothing fits well, "ideas" should be [].';
 
-  return prompt;
+  return { prompt, libraryEntries };
 }
 
 export function buildAiGeneratePromptGeneric(
@@ -255,8 +261,15 @@ export function buildAiGeneratePromptGeneric(
   return prompt;
 }
 
-/** Like buildAiGeneratePromptGeneric, but the AI picks its own format+structure fit per idea, draws on a wider per-category pool of library learnings, and returns as many well-fitting ideas as the context supports rather than a fixed count. */
-export function buildSmartAiGeneratePromptGeneric(data: AppData, categories: Category[], platformLabel: string, context: string, maxCount: number): string {
+/** Like buildAiGeneratePromptGeneric, but the AI picks its own format+structure fit per idea, draws on a wider per-category pool of library learnings (citing which ones it actually used), and returns as many well-fitting ideas as the context supports rather than a fixed count — plus a short AI-written name for the batch. */
+export function buildSmartAiGeneratePromptGeneric(
+  data: AppData,
+  categories: Category[],
+  platformLabel: string,
+  context: string,
+  maxCount: number
+): { prompt: string; libraryEntries: LibraryEntry[] } {
+  const libraryEntries: LibraryEntry[] = [];
   const frameworkText = categories
     .map((c) => {
       const structuresText = c.structures.map((st) => st.text).filter(Boolean).join(" | ");
@@ -266,11 +279,16 @@ export function buildSmartAiGeneratePromptGeneric(data: AppData, categories: Cat
           return a.name + (struct ? " [structure: " + struct + "]" : "");
         })
         .join("; ");
-      const libraryEntries = data.library
+      const catLibraryEntries = data.library
         .filter((e) => e.categoryIds.includes(c.id))
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .slice(0, SMART_MULTI_LIBRARY_CAP_PER_CAT);
-      const libText = libraryEntries.map((e) => e.text).join(" | ");
+      const libText = catLibraryEntries
+        .map((e) => {
+          libraryEntries.push(e);
+          return "[" + libraryEntries.length + "] " + e.text;
+        })
+        .join(" | ");
       return (
         c.name +
         " (" +
@@ -283,7 +301,7 @@ export function buildSmartAiGeneratePromptGeneric(data: AppData, categories: Cat
         c.desc +
         " Formats: " +
         angleLines +
-        (libText ? " Learnings (use only if genuinely relevant to the idea, fine to use none): " + libText : "")
+        (libText ? " Learnings (use only if genuinely relevant to the idea, fine to use none; cite numbers in libraryRefs if used): " + libText : "")
       );
     })
     .join("\n");
@@ -319,15 +337,16 @@ export function buildSmartAiGeneratePromptGeneric(data: AppData, categories: Cat
     (platformLabel ? " for " + platformLabel : "") +
     ", up to " +
     maxCount +
-    " — do not pad to reach that number. If nothing fits the context well, it's fine to return fewer, or none at all. Respond ONLY with a raw JSON array (no markdown fences, no commentary) of 0 to " +
+    " — do not pad to reach that number. If nothing fits the context well, it's fine to return fewer, or none at all." +
+    ' Respond ONLY with a raw JSON object (no markdown fences, no commentary) shaped like: {"batchName": a short 3-6 word name capturing the shared theme of this batch based on the context, "ideas": array of 0 to ' +
     maxCount +
-    ' objects shaped like: {"title": short idea title, "hook": one opening line, "category": one of [' +
+    ' objects, each shaped like: {"title": short idea title, "hook": one opening line, "category": one of [' +
     categories.map((c) => c.name).join(", ") +
     '], "platform": ' +
     platformOptionsText +
-    ', "format": the format name you chose from that category\'s list, "structure": the structure you followed (empty string if none applicable), "notes": one sentence on why or how to shoot it}. If nothing fits well, respond with an empty array [].';
+    ', "format": the format name you chose from that category\'s list, "structure": the structure you followed (empty string if none applicable), "notes": one sentence on why or how to shoot it, "libraryRefs": array of the bracketed learning numbers you genuinely drew from for this specific idea, or [] if none}}. If nothing fits well, "ideas" should be [].';
 
-  return prompt;
+  return { prompt, libraryEntries };
 }
 
 export function buildScriptPrompt(data: AppData, idea: Idea, cat: Category | undefined, instruction: string): string {

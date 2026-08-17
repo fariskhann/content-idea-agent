@@ -39,6 +39,14 @@ export interface Idea {
   script: string;
   isDraft: boolean;
   createdAt: number;
+  /** Smart-mode only: the format the AI chose for this idea. Undefined for rigid-mode/manually created ideas. */
+  format?: string;
+  /** Smart-mode only: the structure the AI chose for this idea. */
+  structure?: string;
+  /** LibraryEntry.id[] the AI cited as informing this idea — may point at a since-deleted entry, resolve defensively wherever displayed. */
+  libraryEntryIds?: string[];
+  /** GenerationBatch.id this idea was approved from (smart mode only), for "generated with N others" traceability. */
+  batchId?: string;
 }
 
 export type TranscriptStatus = "not_fetched" | "fetching" | "ok" | "unavailable";
@@ -96,6 +104,18 @@ export interface LibraryEntry {
   updatedAt: number;
 }
 
+export interface GenerationBatch {
+  id: string;
+  /** AI-written short name summarizing the batch, from the same API call that produced the ideas. */
+  name: string;
+  createdAt: number;
+  /** Category.id the batch was scoped to; "" when generated across all categories (generic smart mode). */
+  categoryId: string;
+  platformGroup: PlatformGroup;
+  /** Snapshot of the user context text used to generate this batch. */
+  context: string;
+}
+
 export interface AppData {
   brandName: string;
   brandOneLiner: string;
@@ -120,6 +140,7 @@ export interface AppData {
   ideas: Idea[];
   inspirations: Inspiration[];
   library: LibraryEntry[];
+  generationBatches: GenerationBatch[];
 }
 
 export type TabId = "brand" | "generate" | "ideas" | "frameworks" | "inspiration" | "library";

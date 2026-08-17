@@ -153,5 +153,6 @@ export function defaultSeed(): AppData {
       },
     ],
     library: [],
+    generationBatches: [],
   };
 }

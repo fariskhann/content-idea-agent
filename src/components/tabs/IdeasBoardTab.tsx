@@ -28,6 +28,11 @@ function IdeaCard({ idea }: { idea: Idea }) {
   const scriptButtonLabel = scriptGenerating ? "Generating…" : idea.script ? "Regenerate script" : "Generate script";
   const created = idea.createdAt ? new Date(idea.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
 
+  const citedEntries = (idea.libraryEntryIds || []).map((id) => app.data.library.find((e) => e.id === id)).filter((e): e is NonNullable<typeof e> => !!e);
+  const batch = idea.batchId ? app.data.generationBatches.find((b) => b.id === idea.batchId) : undefined;
+  const siblings = batch ? app.data.ideas.filter((i) => i.batchId === batch.id && i.id !== idea.id) : [];
+  const siblingsExpanded = !!app.expandedSiblingIds[idea.id];
+
   return (
     <div style={{ background: "var(--color-surface)", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -71,6 +76,32 @@ function IdeaCard({ idea }: { idea: Idea }) {
             rows={2}
             style={{ border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 13, color: "var(--color-text)", padding: "6px 8px", width: "100%" }}
           />
+          {(idea.format || idea.structure) && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {idea.format && (
+                <div style={{ fontSize: 12, color: muted(65) }}>
+                  <strong style={{ color: "var(--color-text)" }}>Format:</strong> {idea.format}
+                </div>
+              )}
+              {idea.structure && (
+                <div style={{ fontSize: 12, color: muted(65) }}>
+                  <strong style={{ color: "var(--color-text)" }}>Structure:</strong> {idea.structure}
+                </div>
+              )}
+            </div>
+          )}
+          {citedEntries.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55), marginBottom: 4 }}>
+                Drew from library
+              </div>
+              {citedEntries.map((e) => (
+                <div key={e.id} style={{ fontSize: 11, color: muted(60), borderLeft: `2px solid ${muted(25)}`, paddingLeft: 6, marginTop: 4 }}>
+                  {e.text}
+                </div>
+              ))}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 6 }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={fieldLabel}>Platform</div>
@@ -171,6 +202,26 @@ function IdeaCard({ idea }: { idea: Idea }) {
           />
 
           <div style={{ fontSize: 11, color: muted(50), borderTop: `1px solid ${muted(25)}`, paddingTop: 6 }}>{created}</div>
+          {batch && siblings.length > 0 && (
+            <div>
+              <button
+                onClick={() => app.toggleSiblingsExpand(idea.id)}
+                style={{ textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 11, fontWeight: 600, color: muted(55) }}
+              >
+                {siblingsExpanded ? "− " : "+ "}Generated with {siblings.length} other{siblings.length === 1 ? "" : "s"} ({batch.name})
+              </button>
+              {siblingsExpanded && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 6 }}>
+                  {siblings.map((s) => (
+                    <div key={s.id} style={{ fontSize: 11, color: muted(60), display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <span>{s.title || "Untitled idea"}</span>
+                      <span style={{ textTransform: "capitalize", flexShrink: 0 }}>{s.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <button onClick={() => app.toggleIdeaExpand(idea.id)} style={{ textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 11, fontWeight: 600, color: muted(55) }}>
             − Hide details
           </button>

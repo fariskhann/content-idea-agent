@@ -109,3 +109,24 @@ export function parseJsonArray(text: string): unknown[] | null {
     }
   }
 }
+
+function asObject(parsed: unknown): Record<string, unknown> | null {
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+}
+
+/** Parses a JSON object out of a model response, tolerating stray prose or markdown fences — the object-shaped counterpart to parseJsonArray. Returns null if the top-level value isn't a plain object (including if it's an array). */
+export function parseJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const direct = asObject(JSON.parse(text));
+    if (direct) return direct;
+  } catch {
+    // fall through
+  }
+  const objectMatch = text.match(/\{[\s\S]*\}/);
+  if (!objectMatch) return null;
+  try {
+    return asObject(JSON.parse(objectMatch[0]));
+  } catch {
+    return null;
+  }
+}
