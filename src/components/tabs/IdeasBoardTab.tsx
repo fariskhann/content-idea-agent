@@ -59,6 +59,11 @@ function IdeaCard({ idea }: { idea: Idea }) {
     .map((id) => app.data.library.find((e) => e.id === id))
     .filter((e): e is NonNullable<typeof e> => !!e);
 
+  const showIdeaRegenPanel = !!app.ideaRegenOpenIds[idea.id];
+  const ideaRegenNote = app.ideaRegenNotes[idea.id] || "";
+  const revisingIdea = !!app.revisingIdeaIds[idea.id];
+  const ideaRevisionError = app.ideaRevisionErrors[idea.id] || "";
+
   return (
     <div
       ref={setNodeRef}
@@ -186,12 +191,49 @@ function IdeaCard({ idea }: { idea: Idea }) {
                   ))}
                 </div>
               )}
-              <div style={{ fontSize: 10, color: muted(45) }}>
-                Evaluated {new Date(idea.evaluation.generatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontSize: 10, color: muted(45) }}>
+                  Evaluated {new Date(idea.evaluation.generatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                </div>
+                <button
+                  onClick={() => {
+                    app.setIdeaRegenNote(idea.id, idea.evaluation!.reasoning);
+                    app.openIdeaRegenPanel(idea.id);
+                  }}
+                  style={{ border: `1px solid ${muted(35)}`, background: "transparent", color: "var(--color-text)", padding: "3px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                >
+                  Apply feedback
+                </button>
               </div>
             </div>
           )}
           {evaluationError && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{evaluationError}</div>}
+          {showIdeaRegenPanel && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "var(--color-bg)", border: `1px solid ${muted(25)}`, padding: 8 }}>
+              <input
+                value={ideaRegenNote}
+                onChange={(e) => app.setIdeaRegenNote(idea.id, e.target.value)}
+                placeholder="What should change? e.g. sharper hook, less generic title"
+                style={{ border: `1px solid ${muted(25)}`, background: "var(--color-surface)", fontSize: 12, color: "var(--color-text)", padding: "6px 8px", width: "100%" }}
+              />
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  onClick={() => app.reviseIdea(idea.id, ideaRegenNote)}
+                  disabled={revisingIdea || !ideaRegenNote.trim()}
+                  style={{ flex: 1, border: "1px solid var(--color-accent)", background: "var(--color-accent)", color: "var(--color-bg)", padding: "6px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                >
+                  {revisingIdea ? "Revising…" : "Revise idea"}
+                </button>
+                <button
+                  onClick={() => app.closeIdeaRegenPanel(idea.id)}
+                  style={{ border: "1px solid var(--color-divider)", background: "transparent", color: "var(--color-text)", padding: "6px 10px", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Cancel
+                </button>
+              </div>
+              {ideaRevisionError && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{ideaRevisionError}</div>}
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 6 }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -327,8 +369,19 @@ function IdeaCard({ idea }: { idea: Idea }) {
                       ))}
                     </div>
                   )}
-                  <div style={{ fontSize: 10, color: muted(45) }}>
-                    Evaluated {new Date(idea.scriptEvaluation.generatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: 10, color: muted(45) }}>
+                      Evaluated {new Date(idea.scriptEvaluation.generatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </div>
+                    <button
+                      onClick={() => {
+                        app.setRegenNote(idea.id, idea.scriptEvaluation!.reasoning);
+                        app.openRegenPanel(idea.id);
+                      }}
+                      style={{ border: `1px solid ${muted(35)}`, background: "transparent", color: "var(--color-text)", padding: "3px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                    >
+                      Apply feedback
+                    </button>
                   </div>
                 </div>
               )}

@@ -148,10 +148,15 @@ export interface LibraryEntry {
   platform: PlatformGroup;
   /** The distilled, durable learning — compact and reusable, not raw analysis output. */
   text: string;
-  sourceInspirationId: string;
+  /** Distinguishes how this entry was produced. Absent (legacy rows, and all rows from inspiration distillation) behaves as "inspiration". */
+  sourceKind?: "inspiration" | "evaluation";
+  /** Present for sourceKind "inspiration" (or legacy rows). Absent for "evaluation" entries — there's no inspiration source to denormalize. */
+  sourceInspirationId?: string;
   /** Denormalized snapshot so the entry still reads sensibly if the Inspiration is later renamed or deleted. */
-  sourceInspirationName: string;
+  sourceInspirationName?: string;
   sourceVideoIds: string[];
+  /** Idea.id[] whose evaluation critiques this learning was distilled from — present only for sourceKind "evaluation". May point at a since-deleted idea; resolve defensively wherever displayed. */
+  sourceIdeaIds?: string[];
   createdAt: number;
   updatedAt: number;
 }

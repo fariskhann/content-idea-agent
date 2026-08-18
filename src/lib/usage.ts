@@ -8,6 +8,8 @@ export interface UsageLogEntry {
     | "script"
     | "evaluate-idea"
     | "evaluate-script"
+    | "revise-idea"
+    | "distill-evaluations"
     | "youtube-analysis"
     | "library-distill"
     | "tiktok-fetch"

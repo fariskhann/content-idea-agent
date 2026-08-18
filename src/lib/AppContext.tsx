@@ -6,12 +6,14 @@ import { defaultSeed } from "./seed";
 import { loadSettings, empty as defaultSettings, type Settings } from "./settings";
 import {
   buildEvaluatePrompt,
+  buildEvaluationDistillationPrompt,
+  buildReviseIdeaPrompt,
   buildScriptEvaluatePrompt,
   buildScriptPrompt,
   buildSmartAiGeneratePromptForCategory,
   buildSmartAiGeneratePromptGeneric,
 } from "./generation";
-import { complete, parseJsonObject } from "./ai";
+import { complete, parseJsonArray, parseJsonObject } from "./ai";
 import { getModel, costUsd, providerLabel } from "./models";
 import { loadUsageLog, type UsageLogEntry } from "./usage";
 import { loadTranscriptLog, loadTranscriptBackupLog } from "./transcriptUsage";
@@ -103,6 +105,23 @@ interface PendingGenerationBatch {
   max: number;
 }
 
+/** One AI-proposed recurring-pattern Library entry awaiting review, before commitDistillBatch saves it. Unlike PendingCandidate, text is directly editable here. */
+interface PendingDistillationCandidate {
+  tempId: string;
+  text: string;
+  categoryIds: string[];
+  sourceIdeaIds: string[];
+  approved: boolean;
+}
+
+/** An evaluation-distillation result awaiting review — nothing here is persisted until commitDistillBatch runs. */
+interface PendingDistillationBatch {
+  candidates: PendingDistillationCandidate[];
+  /** "" = distilled across all categories in platformGroup ("General" scope). */
+  categoryId: string;
+  platformGroup: PlatformGroup;
+}
+
 interface AppState {
   data: AppData;
   activeTab: TabId;
@@ -125,6 +144,13 @@ interface AppState {
   evaluationErrors: Record<string, string>;
   scriptEvaluatingIds: Record<string, boolean>;
   scriptEvaluationErrors: Record<string, string>;
+  ideaRegenOpenIds: Record<string, boolean>;
+  ideaRegenNotes: Record<string, string>;
+  revisingIdeaIds: Record<string, boolean>;
+  ideaRevisionErrors: Record<string, string>;
+  distillPendingBatch: PendingDistillationBatch | null;
+  distilling: boolean;
+  distillError: string;
   settings: Settings;
   settingsOpen: boolean;
   usageLog: UsageLogEntry[];
@@ -158,6 +184,13 @@ function initialAppState(): AppState {
     evaluationErrors: {},
     scriptEvaluatingIds: {},
     scriptEvaluationErrors: {},
+    ideaRegenOpenIds: {},
+    ideaRegenNotes: {},
+    revisingIdeaIds: {},
+    ideaRevisionErrors: {},
+    distillPendingBatch: null,
+    distilling: false,
+    distillError: "",
     settings: {
       anthropicApiKey: "",
       deepseekApiKey: "",
@@ -521,6 +554,11 @@ function useAppStore() {
   const closeRegenPanel = useCallback((id: string) => setState((s) => ({ ...s, scriptRegenOpenIds: { ...s.scriptRegenOpenIds, [id]: false } })), []);
   const setRegenNote = useCallback((id: string, value: string) => setState((s) => ({ ...s, scriptRegenNotes: { ...s.scriptRegenNotes, [id]: value } })), []);
 
+  // ---- idea regen panel ("Apply feedback" on an idea evaluation) ----
+  const openIdeaRegenPanel = useCallback((id: string) => setState((s) => ({ ...s, ideaRegenOpenIds: { ...s.ideaRegenOpenIds, [id]: true } })), []);
+  const closeIdeaRegenPanel = useCallback((id: string) => setState((s) => ({ ...s, ideaRegenOpenIds: { ...s.ideaRegenOpenIds, [id]: false } })), []);
+  const setIdeaRegenNote = useCallback((id: string, value: string) => setState((s) => ({ ...s, ideaRegenNotes: { ...s.ideaRegenNotes, [id]: value } })), []);
+
   // ---- usage / cost tracking ----
   const logUsage = useCallback((entry: Omit<UsageLogEntry, "id" | "timestamp">) => {
     setState((s) => {
@@ -739,7 +777,10 @@ function useAppStore() {
           outputTokens: usage.outputTokens,
           costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
         });
-        setData((cur) => ({ ...cur, ideas: cur.ideas.map((i) => (i.id === id ? { ...i, script: text.trim(), status: "scripted" } : i)) }));
+        setData((cur) => ({
+          ...cur,
+          ideas: cur.ideas.map((i) => (i.id === id ? { ...i, script: text.trim(), status: "scripted", scriptEvaluation: undefined } : i)),
+        }));
         setState((s) => ({
           ...s,
           scriptGeneratingIds: { ...s.scriptGeneratingIds, [id]: false },
@@ -853,6 +894,67 @@ function useAppStore() {
           ...s,
           scriptEvaluatingIds: { ...s.scriptEvaluatingIds, [id]: false },
           scriptEvaluationErrors: { ...s.scriptEvaluationErrors, [id]: "Evaluation failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" },
+        }));
+      }
+    },
+    [state.data, state.settings.anthropicApiKey, state.settings.deepseekApiKey, setData, logUsage]
+  );
+
+  /** Revises a single idea's title/hook to address a critique or instruction — the "Apply feedback" counterpart to evaluateIdea, structurally identical guard/loading/error shape. On success, treated as an active reviewed content change: clears isDraft (same as a manual edit) and clears the now-stale evaluation, since it critiqued the superseded title/hook. */
+  const reviseIdea = useCallback(
+    async (id: string, instruction: string) => {
+      const d = state.data;
+      const idea = d.ideas.find((i) => i.id === id);
+      if (!idea || !instruction.trim()) return;
+      const model = getModel(d.aiModel);
+      const hasKey = model.provider === "anthropic" ? !!state.settings.anthropicApiKey : !!state.settings.deepseekApiKey;
+      if (!hasKey) {
+        setState((s) => ({ ...s, ideaRevisionErrors: { ...s.ideaRevisionErrors, [id]: `Add your ${providerLabel(model.provider)} API key in Settings first.` } }));
+        return;
+      }
+      setState((s) => ({ ...s, revisingIdeaIds: { ...s.revisingIdeaIds, [id]: true }, ideaRevisionErrors: { ...s.ideaRevisionErrors, [id]: "" } }));
+      try {
+        const cat = d.categories.find((c) => c.id === idea.categoryId);
+        const { prompt, libraryEntries } = buildReviseIdeaPrompt(d, idea, cat, instruction);
+        const { text, usage } = await complete({
+          model,
+          apiKeys: { anthropicApiKey: state.settings.anthropicApiKey, deepseekApiKey: state.settings.deepseekApiKey },
+          prompt,
+          maxTokens: 400,
+        });
+        logUsage({
+          feature: "revise-idea",
+          provider: model.provider,
+          modelId: model.id,
+          modelLabel: model.label,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+        });
+        const obj = parseJsonObject(text);
+        const title = obj && typeof obj.title === "string" ? obj.title.trim() : "";
+        const hook = obj && typeof obj.hook === "string" ? obj.hook.trim() : "";
+        if (!title) throw new Error("unexpected response format");
+        const libraryEntryIds = resolveLibraryRefs(obj!.libraryRefs, libraryEntries);
+        setData((cur) => ({
+          ...cur,
+          ideas: cur.ideas.map((i) =>
+            i.id === id
+              ? { ...i, title, hook, isDraft: false, evaluation: undefined, libraryEntryIds: libraryEntryIds.length ? libraryEntryIds : undefined }
+              : i
+          ),
+        }));
+        setState((s) => ({
+          ...s,
+          revisingIdeaIds: { ...s.revisingIdeaIds, [id]: false },
+          ideaRegenOpenIds: { ...s.ideaRegenOpenIds, [id]: false },
+          ideaRegenNotes: { ...s.ideaRegenNotes, [id]: "" },
+        }));
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          revisingIdeaIds: { ...s.revisingIdeaIds, [id]: false },
+          ideaRevisionErrors: { ...s.ideaRevisionErrors, [id]: "Revision failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" },
         }));
       }
     },
@@ -992,6 +1094,129 @@ function useAppStore() {
     [setData]
   );
 
+  /** Reviews accumulated idea/script evaluation critiques (scoped to one category, or "" for every category in platformGroup — "General" scope) and proposes recurring-pattern Library entries for review. A singleton action (not per-idea), so its state is flat like aiGenerate's, not a per-id map. */
+  const distillEvaluations = useCallback(
+    async (categoryId: string, platformGroup: PlatformGroup) => {
+      const d = state.data;
+      const model = getModel(d.aiModel);
+      const hasKey = model.provider === "anthropic" ? !!state.settings.anthropicApiKey : !!state.settings.deepseekApiKey;
+      if (!hasKey) {
+        setState((s) => ({ ...s, distillError: `Add your ${providerLabel(model.provider)} API key in Settings first.` }));
+        return;
+      }
+      const catsInGroup = d.categories.filter((c) => c.platform === platformGroup);
+      const candidateIdeas = d.ideas.filter(
+        (i) =>
+          (categoryId ? i.categoryId === categoryId : catsInGroup.some((c) => c.id === i.categoryId)) &&
+          (i.evaluation?.reasoning || i.scriptEvaluation?.reasoning)
+      );
+      if (!candidateIdeas.length) {
+        setState((s) => ({ ...s, distillError: "No evaluated ideas in this content type yet." }));
+        return;
+      }
+      setState((s) => ({ ...s, distilling: true, distillError: "" }));
+      try {
+        const prompt = buildEvaluationDistillationPrompt(d, catsInGroup, candidateIdeas);
+        const { text, usage } = await complete({
+          model,
+          apiKeys: { anthropicApiKey: state.settings.anthropicApiKey, deepseekApiKey: state.settings.deepseekApiKey },
+          prompt,
+          maxTokens: Math.min(3000, 500 + candidateIdeas.length * 200),
+        });
+        logUsage({
+          feature: "distill-evaluations",
+          provider: model.provider,
+          modelId: model.id,
+          modelLabel: model.label,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+        });
+        const parsed = parseJsonArray(text) as Record<string, unknown>[] | null;
+        if (!parsed) throw new Error("unexpected response format");
+        const candidates: PendingDistillationCandidate[] = parsed
+          .map((p) => {
+            const names = Array.isArray(p.categoryNames) ? (p.categoryNames as unknown[]) : [];
+            const categoryIds = names
+              .map((n) => catsInGroup.find((c) => c.name.trim().toLowerCase() === String(n).trim().toLowerCase())?.id)
+              .filter((id): id is string => !!id);
+            const ideaIdsRaw = Array.isArray(p.ideaIds) ? (p.ideaIds as unknown[]) : [];
+            const sourceIdeaIds = ideaIdsRaw
+              .filter((v): v is string => typeof v === "string")
+              .filter((ideaId) => candidateIdeas.some((i) => i.id === ideaId));
+            return { tempId: genId(), text: String(p.text || "").trim(), categoryIds, sourceIdeaIds, approved: true };
+          })
+          .filter((c) => c.text);
+        setState((s) => ({
+          ...s,
+          distilling: false,
+          distillPendingBatch: { candidates, categoryId, platformGroup },
+        }));
+      } catch (err) {
+        setState((s) => ({ ...s, distilling: false, distillError: "Distilling failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" }));
+      }
+    },
+    [state.data, state.settings.anthropicApiKey, state.settings.deepseekApiKey, logUsage]
+  );
+
+  const toggleDistillCandidateApproval = useCallback((tempId: string) => {
+    setState((s) =>
+      s.distillPendingBatch
+        ? {
+            ...s,
+            distillPendingBatch: {
+              ...s.distillPendingBatch,
+              candidates: s.distillPendingBatch.candidates.map((c) => (c.tempId === tempId ? { ...c, approved: !c.approved } : c)),
+            },
+          }
+        : s
+    );
+  }, []);
+  const setAllDistillCandidatesApproved = useCallback((approved: boolean) => {
+    setState((s) =>
+      s.distillPendingBatch
+        ? { ...s, distillPendingBatch: { ...s.distillPendingBatch, candidates: s.distillPendingBatch.candidates.map((c) => ({ ...c, approved })) } }
+        : s
+    );
+  }, []);
+  const updateDistillCandidateText = useCallback((tempId: string, text: string) => {
+    setState((s) =>
+      s.distillPendingBatch
+        ? {
+            ...s,
+            distillPendingBatch: {
+              ...s.distillPendingBatch,
+              candidates: s.distillPendingBatch.candidates.map((c) => (c.tempId === tempId ? { ...c, text } : c)),
+            },
+          }
+        : s
+    );
+  }, []);
+  const discardDistillBatch = useCallback(() => setState((s) => ({ ...s, distillPendingBatch: null })), []);
+  const commitDistillBatch = useCallback(() => {
+    setState((s) => {
+      const pending = s.distillPendingBatch;
+      if (!pending) return s;
+      const approved = pending.candidates.filter((c) => c.approved && c.text.trim());
+      if (!approved.length) return { ...s, distillPendingBatch: null };
+      const now = Date.now();
+      const newEntries: LibraryEntry[] = approved.map((c) => ({
+        id: genId(),
+        categoryIds: c.categoryIds,
+        platform: pending.platformGroup,
+        text: c.text.trim(),
+        sourceKind: "evaluation",
+        sourceVideoIds: [],
+        sourceIdeaIds: c.sourceIdeaIds,
+        createdAt: now,
+        updatedAt: now,
+      }));
+      const data: AppData = { ...s.data, library: [...newEntries, ...s.data.library] };
+      persist(data);
+      return { ...s, data, distillPendingBatch: null };
+    });
+  }, [persist]);
+
   // ---- fetched inspiration media (YouTube/TikTok/Instagram) ----
   const updateInspirationMedia = useCallback(
     (id: string, patch: Partial<Inspiration>) =>
@@ -1045,6 +1270,10 @@ function useAppStore() {
     generateScript,
     evaluateIdea,
     evaluateScript,
+    openIdeaRegenPanel,
+    closeIdeaRegenPanel,
+    setIdeaRegenNote,
+    reviseIdea,
     setActiveTab,
     goToBoard,
     setAiModel,
@@ -1063,6 +1292,12 @@ function useAppStore() {
     addLibraryEntries,
     updateLibraryEntryText,
     removeLibraryEntry,
+    distillEvaluations,
+    toggleDistillCandidateApproval,
+    setAllDistillCandidatesApproved,
+    updateDistillCandidateText,
+    discardDistillBatch,
+    commitDistillBatch,
     updateInspirationMedia,
     logUsage,
     clearUsage,

@@ -11,6 +11,8 @@ const FEATURE_LABEL: Record<string, string> = {
   script: "Script",
   "evaluate-idea": "Evaluate idea",
   "evaluate-script": "Evaluate script",
+  "revise-idea": "Revise idea",
+  "distill-evaluations": "Distill evaluations",
   "youtube-analysis": "YouTube analysis",
   "library-distill": "Library distill",
   "tiktok-fetch": "TikTok fetch",

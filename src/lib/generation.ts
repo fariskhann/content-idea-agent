@@ -264,6 +264,52 @@ export function buildEvaluatePrompt(data: AppData, idea: Idea, cat: Category | u
   return { prompt, libraryEntries };
 }
 
+/** Revises a single idea's title and hook to address a specific critique or instruction — the "Apply feedback" counterpart to buildEvaluatePrompt. Same context-gathering and numbered-citation pattern; only the closing instruction differs (revise, not judge). */
+export function buildReviseIdeaPrompt(data: AppData, idea: Idea, cat: Category | undefined, instruction: string): { prompt: string; libraryEntries: LibraryEntry[] } {
+  const { brandBlock, personalBlock } = buildVoiceAndBrandBlocks(data);
+  const owner = cat ? cat.owner : "brand";
+  const ownerLine =
+    owner === "personal"
+      ? "This idea is meant to be in the personal voice of " + (data.personalName || "the creator") + (data.personalVoice ? " — voice: " + data.personalVoice : "")
+      : `This idea is meant to be in the "${data.brandName}" brand voice` + (data.brandVoice ? " — voice: " + data.brandVoice : "");
+
+  let prompt = brandBlock + (personalBlock ? "\n" + personalBlock : "") + "\n" + ownerLine + ".\n\n";
+  prompt += "You are revising a single content idea already on the board to address specific feedback. Keep what already works — change only what the feedback calls for.\n\n";
+  prompt += "Current title: " + (idea.title || "Untitled") + "\n";
+  if (idea.hook) prompt += "Current hook: " + idea.hook + "\n";
+  if (idea.platform && idea.platform !== "Any") prompt += "Platform: " + idea.platform + "\n";
+  if (idea.notes) prompt += "Notes: " + idea.notes + "\n";
+  if (idea.format) prompt += "Chosen format: " + idea.format + "\n";
+  if (idea.structure) prompt += "Chosen structure: " + idea.structure + "\n";
+
+  let libraryEntries: LibraryEntry[] = [];
+  if (cat) {
+    prompt += "\nContent type: " + cat.name + " (" + cat.stage + "). " + cat.desc + "\n";
+    if (cat.angles.length)
+      prompt += "Formats actually available for this content type: " + cat.angles.map((a) => '"' + a.name + '"' + (a.structure ? " (" + a.structure + ")" : "")).join(", ") + "\n";
+    if (cat.structures.length)
+      prompt += "Structures actually available: " + cat.structures.map((st) => st.text).filter(Boolean).join(" | ") + "\n";
+
+    libraryEntries = data.library
+      .filter((e) => e.categoryIds.includes(cat.id))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, SMART_SINGLE_LIBRARY_CAP);
+    if (libraryEntries.length)
+      prompt += "\nThings we've learned from analysing inspiration for this content type:\n" + libraryEntries.map((e, i) => "[" + (i + 1) + "] " + e.text).join("\n") + "\n";
+    else prompt += "\nNo library learnings are logged yet for this content type — say so plainly rather than inventing a pattern fit.\n";
+  } else {
+    prompt += "\nThis idea has no content type assigned, so there's no framework or library learnings to draw on — revise based only on the feedback below and general voice fit.\n";
+  }
+
+  prompt += "\nFeedback to address:\n" + instruction + "\n";
+  prompt +=
+    "\nRevise the title and/or hook so they genuinely address the feedback above — don't make cosmetic changes that dodge the actual critique. " +
+    "Cite library learnings by their bracketed number when they inform the revision. " +
+    'Respond ONLY with a raw JSON object (no markdown fences, no commentary) shaped like: {"title": the revised title, "hook": the revised hook, "libraryRefs": array of the bracketed learning numbers the revision actually draws from, or [] if none}.';
+
+  return { prompt, libraryEntries };
+}
+
 /** Critiques the actual generated script content of a single idea already on the board — distinct from buildEvaluatePrompt's title/hook-only critique. Same numbered-citation pattern; caps script length like the transcript caps used elsewhere in analysis prompts. */
 export function buildScriptEvaluatePrompt(data: AppData, idea: Idea, cat: Category | undefined): { prompt: string; libraryEntries: LibraryEntry[] } {
   const { brandBlock, personalBlock } = buildVoiceAndBrandBlocks(data);
@@ -305,4 +351,38 @@ export function buildScriptEvaluatePrompt(data: AppData, idea: Idea, cat: Catego
   prompt += "\n" + (data.scriptEvaluationInstructions || DEFAULT_SCRIPT_EVALUATION_INSTRUCTIONS);
 
   return { prompt, libraryEntries };
+}
+
+/** Distills recurring weaknesses out of a batch of already-written idea/script evaluation critiques into durable Library entries — the evaluation-side counterpart to buildDistillationPrompt (which distills from analysed inspiration videos instead). Only genuinely recurring patterns should survive, never a restatement of a single critique. */
+export function buildEvaluationDistillationPrompt(data: AppData, platformCategories: Category[], ideas: Idea[]): string {
+  const { brandBlock, personalBlock } = buildVoiceAndBrandBlocks(data);
+  let prompt = brandBlock + (personalBlock ? "\n" + personalBlock : "") + "\n";
+  prompt +=
+    "You're distilling durable, reusable lessons from a batch of AI critiques already written about our own ideas and scripts into a permanent knowledge library that will be fed into future content-idea and script generation for our own content.\n\n";
+
+  prompt += "Content types:\n";
+  prompt += platformCategories.map((c) => "- " + c.name + ": " + c.desc).join("\n") + "\n";
+  prompt += '- General: doesn\'t cleanly fit one content type, or applies broadly\n\n';
+
+  prompt += "Critiques:\n";
+  prompt += ideas
+    .map((idea) => {
+      const cat = platformCategories.find((c) => c.id === idea.categoryId);
+      let block = "[" + idea.id + '] "' + (idea.title || "Untitled") + '" (' + (cat ? cat.name : "General") + ")\n";
+      if (idea.evaluation?.reasoning) block += "Idea critique: " + idea.evaluation.reasoning + "\n";
+      if (idea.scriptEvaluation?.reasoning) block += "Script critique: " + idea.scriptEvaluation.reasoning + "\n";
+      return block;
+    })
+    .join("\n");
+
+  prompt +=
+    "\nExtract only the patterns that genuinely recur across multiple critiques above — do not restate a single one-off critique as if it were a pattern. Keep each learning compact (1-3 sentences), something a content strategist could apply to a totally different idea next month. If multiple critiques share the same underlying pattern, consolidate them into a single learning rather than repeating near-duplicates — the number of learnings you return does not need to match the number of critiques. " +
+    "If there isn't enough repeated signal across these critiques to state a genuine recurring pattern — say so plainly by returning an empty array, rather than inventing one.\n\n";
+
+  prompt +=
+    'Respond ONLY with a raw JSON array (no markdown fences, no commentary) of objects shaped like: {"text": the distilled learning, "categoryNames": array of one or more of [' +
+    platformCategories.map((c) => c.name).join(", ") +
+    ', General] that this learning applies to, "ideaIds": array of the bracketed idea id(s) from above that this pattern draws from}. Return [] if no genuine recurring pattern is found.';
+
+  return prompt;
 }
