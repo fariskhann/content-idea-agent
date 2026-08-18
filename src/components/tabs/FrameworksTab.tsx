@@ -224,6 +224,39 @@ export function FrameworksTab() {
           </div>
         </div>
       </div>
+
+      <div style={{ borderTop: "2px solid var(--color-divider)", paddingTop: 24, marginTop: 32 }}>
+        <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 800, fontSize: 22, margin: "0 0 4px" }}>Evaluation instructions</h2>
+        <p style={{ fontSize: 13, color: muted(60), margin: "0 0 16px" }}>
+          The exact instructions sent to the AI when critiquing an idea or its script on the board — edit these to change what it judges and how.
+        </p>
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={kicker}>Idea evaluation</div>
+          <textarea
+            value={d.ideaEvaluationInstructions}
+            onChange={(e) => app.setBrandField("ideaEvaluationInstructions")(e.target.value)}
+            rows={4}
+            style={{ ...textarea, maxWidth: 640 }}
+          />
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
+            Sent as-is on every &quot;Evaluate idea&quot; run, right after the title/hook and library-learnings context.
+          </div>
+        </div>
+
+        <div>
+          <div style={kicker}>Script evaluation</div>
+          <textarea
+            value={d.scriptEvaluationInstructions}
+            onChange={(e) => app.setBrandField("scriptEvaluationInstructions")(e.target.value)}
+            rows={4}
+            style={{ ...textarea, maxWidth: 640 }}
+          />
+          <div style={{ fontSize: 12, color: muted(55), marginTop: 6 }}>
+            Sent as-is on every &quot;Evaluate script&quot; run, right after the script content being judged.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

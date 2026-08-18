@@ -9,6 +9,8 @@ import { providerLabel } from "@/lib/models";
 const FEATURE_LABEL: Record<string, string> = {
   generate: "Generate",
   script: "Script",
+  "evaluate-idea": "Evaluate idea",
+  "evaluate-script": "Evaluate script",
   "youtube-analysis": "YouTube analysis",
   "library-distill": "Library distill",
   "tiktok-fetch": "TikTok fetch",

@@ -2,6 +2,7 @@ import { genId } from "./id";
 import { DEFAULT_MODEL_ID } from "./models";
 import { DEFAULT_YOUTUBE_ANALYSIS_INSTRUCTIONS } from "./youtube";
 import { DEFAULT_IGTIKTOK_ANALYSIS_INSTRUCTIONS } from "./socialVideos";
+import { DEFAULT_IDEA_EVALUATION_INSTRUCTIONS, DEFAULT_SCRIPT_EVALUATION_INSTRUCTIONS } from "./generation";
 import type { AppData } from "./types";
 
 export function defaultSeed(): AppData {
@@ -22,6 +23,8 @@ export function defaultSeed(): AppData {
     genBatchSize: 5,
     youtubeAnalysisInstructions: DEFAULT_YOUTUBE_ANALYSIS_INSTRUCTIONS,
     igTiktokAnalysisInstructions: DEFAULT_IGTIKTOK_ANALYSIS_INSTRUCTIONS,
+    ideaEvaluationInstructions: DEFAULT_IDEA_EVALUATION_INSTRUCTIONS,
+    scriptEvaluationInstructions: DEFAULT_SCRIPT_EVALUATION_INSTRUCTIONS,
     categories: [
       {
         id: "yap",

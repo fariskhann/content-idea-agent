@@ -6,7 +6,7 @@ export type InspirationPlatform = "YouTube" | "Instagram" | "TikTok";
 export type SocialPlatformKind = "TikTok" | "Instagram";
 export type Stage = "TOF" | "MOF" | "BOF";
 export type Owner = "brand" | "personal";
-export type IdeaStatus = "idea" | "scripted" | "filmed" | "posted";
+export type IdeaStatus = "idea" | "scripted" | "posted";
 
 export interface TextItem {
   id: string;
@@ -42,14 +42,28 @@ export interface Idea {
   script: string;
   isDraft: boolean;
   createdAt: number;
-  /** Smart-mode only: the format the AI chose for this idea. Undefined for rigid-mode/manually created ideas. */
+  /** Board sort position within its status column — lower sorts first. New ideas get Date.now()-scale values; legacy rows are backfilled from createdAt on load (see normalizePlatformGroups in AppContext.tsx). */
+  order: number;
+  /** The format the AI chose for this idea during generation. Undefined for manually created ideas. */
   format?: string;
-  /** Smart-mode only: the structure the AI chose for this idea. */
+  /** The structure the AI chose for this idea during generation. */
   structure?: string;
   /** LibraryEntry.id[] the AI cited as informing this idea — may point at a since-deleted entry, resolve defensively wherever displayed. */
   libraryEntryIds?: string[];
-  /** GenerationBatch.id this idea was approved from (smart mode only), for "generated with N others" traceability. */
+  /** GenerationBatch.id this idea was approved from, for "generated with N others" traceability. */
   batchId?: string;
+  /** AI critique — from either the free inline critique during generation review, or the standalone "Evaluate idea" action. Never touched by updateIdea's generic field setter. */
+  evaluation?: IdeaEvaluation;
+  /** AI critique of idea.script's actual content — from the standalone "Evaluate script" action. Separate from `evaluation`, which judges title/hook only. Never touched by updateIdea's generic field setter. */
+  scriptEvaluation?: IdeaEvaluation;
+}
+
+export interface IdeaEvaluation {
+  /** Qualitative critique prose only — never a numeric score or tier label. */
+  reasoning: string;
+  /** LibraryEntry.id[] this evaluation judged the idea against — may point at a since-deleted entry, resolve defensively wherever displayed. */
+  libraryEntryIds?: string[];
+  generatedAt: number;
 }
 
 export type TranscriptStatus = "not_fetched" | "fetching" | "ok" | "unavailable";
@@ -173,6 +187,10 @@ export interface AppData {
   youtubeAnalysisInstructions: string;
   /** Editable instructions sent to the AI when analyzing Instagram/TikTok inspiration videos — see Frameworks. */
   igTiktokAnalysisInstructions: string;
+  /** Editable instructions sent to the AI when critiquing an idea's title/hook via "Evaluate idea" — see Frameworks. */
+  ideaEvaluationInstructions: string;
+  /** Editable instructions sent to the AI when critiquing an idea's script via "Evaluate script" — see Frameworks. */
+  scriptEvaluationInstructions: string;
   categories: Category[];
   hooks: TextItem[];
   ideas: Idea[];

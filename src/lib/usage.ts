@@ -3,7 +3,17 @@ import type { Provider } from "./models";
 export interface UsageLogEntry {
   id: string;
   timestamp: number;
-  feature: "generate" | "script" | "youtube-analysis" | "library-distill" | "tiktok-fetch" | "instagram-fetch" | "tiktok-analysis" | "instagram-analysis";
+  feature:
+    | "generate"
+    | "script"
+    | "evaluate-idea"
+    | "evaluate-script"
+    | "youtube-analysis"
+    | "library-distill"
+    | "tiktok-fetch"
+    | "instagram-fetch"
+    | "tiktok-analysis"
+    | "instagram-analysis";
   provider: Provider;
   modelId: string;
   modelLabel: string;

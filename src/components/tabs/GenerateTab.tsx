@@ -81,6 +81,11 @@ function PendingBatchReview() {
                         ))}
                       </div>
                     )}
+                    {c.concerns && (
+                      <div style={{ fontSize: 12, color: muted(65), fontStyle: "italic", borderTop: `1px solid ${muted(15)}`, paddingTop: 6, marginTop: 2 }}>
+                        {c.concerns}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -143,86 +148,28 @@ export function GenerateTab() {
         ))}
       </div>
 
-      <div style={{ marginBottom: 22 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--color-text)", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={app.genSmartMode}
-            onChange={(e) => app.setGenSmartMode(e.target.checked)}
-            style={{ accentColor: "var(--color-accent)", width: 15, height: 15 }}
-          />
-          Let AI pick formats &amp; structures
-        </label>
-      </div>
-
-      {activeCat && app.genSmartMode && (
+      {activeCat && (
         <div style={{ marginBottom: 24, fontSize: 13, color: muted(60) }}>
           The AI will choose the best-fitting format and structure for each idea from {activeCat.name}&apos;s available options.
         </div>
       )}
 
-      {activeCat && !app.genSmartMode && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ ...kicker, marginBottom: 10 }}>Formats to include</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginBottom: 18 }}>
-            {activeCat.angles.map((a) => (
-              <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--color-text)", cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={app.isFormatChecked(a.id)}
-                  onChange={() => app.toggleFormatCheck(a.id)}
-                  style={{ accentColor: "var(--color-accent)", width: 15, height: 15 }}
-                />
-                {a.name}
-              </label>
-            ))}
-          </div>
-          {activeCat.structures.length > 0 && (
-            <>
-              <div style={{ ...kicker, marginBottom: 10 }}>Structures to include</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {activeCat.structures.map((st) => (
-                  <label key={st.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "var(--color-text)", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={app.isStructureChecked(st.id)}
-                      onChange={() => app.toggleStructureCheck(st.id)}
-                      style={{ accentColor: "var(--color-accent)", width: 15, height: 15, marginTop: 2, flexShrink: 0 }}
-                    />
-                    <span>{st.text || "(untitled structure)"}</span>
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      <div style={{ ...kicker, marginBottom: 10 }}>Context {app.genSmartMode ? "(required)" : "(optional)"}</div>
+      <div style={{ ...kicker, marginBottom: 10 }}>Context (required)</div>
       <textarea
         value={app.genContext}
         onChange={(e) => app.setGenContext(e.target.value)}
         placeholder="What happened today, a comment someone made, a decision you're wrestling with..."
         rows={3}
-        style={{ ...textarea, marginBottom: app.genSmartMode && !app.genContext.trim() ? 8 : 22 }}
+        style={{ ...textarea, marginBottom: !app.genContext.trim() ? 8 : 22 }}
       />
-      {app.genSmartMode && !app.genContext.trim() && (
+      {!app.genContext.trim() && (
         <div style={{ marginBottom: 22, fontSize: 12, color: "var(--color-accent-700)" }}>
           Add a bit of context — rough is fine — so the AI can pick the right fit.
         </div>
       )}
 
       <div style={{ marginBottom: 24 }}>
-        <div style={{ ...kicker, marginBottom: 10 }}>
-          {app.genSmartMode ? (
-            <>Up to {d.genBatchSize} ideas</>
-          ) : (
-            <>
-              Rounds to generate: {d.genBatchSize}{" "}
-              <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: muted(50) }}>× formats × structures</span>
-            </>
-          )}
-        </div>
+        <div style={{ ...kicker, marginBottom: 10 }}>Up to {d.genBatchSize} ideas</div>
         <input
           type="range"
           min={1}
@@ -235,7 +182,7 @@ export function GenerateTab() {
       </div>
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <button style={primaryBtn} onClick={app.aiGenerate} disabled={app.generating || (app.genSmartMode && !app.genContext.trim())}>
+        <button style={primaryBtn} onClick={app.aiGenerate} disabled={app.generating || !app.genContext.trim()}>
           {app.generating ? "Generating…" : "Generate with AI"}
         </button>
       </div>

@@ -4,11 +4,13 @@ import { useState } from "react";
 import { useApp } from "@/lib/AppContext";
 import { chipStyle, fieldLabel, muted, pageTitle, removeBtn } from "@/lib/styles";
 import type { Idea, IdeaStatus } from "@/lib/types";
+import { closestCenter, DndContext, KeyboardSensor, pointerWithin, PointerSensor, useDroppable, useSensor, useSensors, type CollisionDetection, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const COLUMNS: { status: IdeaStatus; label: string }[] = [
   { status: "idea", label: "Idea" },
   { status: "scripted", label: "Scripted" },
-  { status: "filmed", label: "Filmed" },
   { status: "posted", label: "Posted" },
 ];
 
@@ -18,10 +20,18 @@ const BOARD_FILTERS: { value: "All" | "YouTube" | "IGTikTok"; label: string }[] 
   { value: "IGTikTok", label: "IG + TikTok" },
 ];
 
+/** closestCenter alone picks the nearest droppable RECT CENTER, which misbehaves for a Kanban board: an empty (or tall) column's droppable spans the whole column height, so its center can sit far below where the pointer actually is, losing out to a nearby card in the wrong column. Check literal pointer containment first, falling back to closestCenter only when the pointer briefly isn't over anything measurable (e.g. a very fast drag). */
+const collisionDetectionStrategy: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0 ? pointerCollisions : closestCenter(args);
+};
+
 function IdeaCard({ idea }: { idea: Idea }) {
   const app = useApp();
   const cat = app.data.categories.find((c) => c.id === idea.categoryId);
   const expanded = !!app.expandedIds[idea.id];
+  const [libraryCollapsed, setLibraryCollapsed] = useState(false);
+  const [evaluationCollapsed, setEvaluationCollapsed] = useState(false);
   const scriptGenerating = !!app.scriptGeneratingIds[idea.id];
   const showRegenPanel = !!app.scriptRegenOpenIds[idea.id];
   const regenNote = app.scriptRegenNotes[idea.id] || "";
@@ -33,14 +43,47 @@ function IdeaCard({ idea }: { idea: Idea }) {
   const siblings = batch ? app.data.ideas.filter((i) => i.batchId === batch.id && i.id !== idea.id) : [];
   const siblingsExpanded = !!app.expandedSiblingIds[idea.id];
 
+  const evaluating = !!app.evaluatingIds[idea.id];
+  const evaluationError = app.evaluationErrors[idea.id] || "";
+  const evaluateButtonLabel = evaluating ? "Evaluating…" : idea.evaluation ? "Re-evaluate idea" : "Evaluate idea";
+  const evaluationCitedEntries = (idea.evaluation?.libraryEntryIds || [])
+    .map((id) => app.data.library.find((e) => e.id === id))
+    .filter((e): e is NonNullable<typeof e> => !!e);
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: idea.id });
+  const [scriptEvaluationCollapsed, setScriptEvaluationCollapsed] = useState(false);
+  const scriptEvaluating = !!app.scriptEvaluatingIds[idea.id];
+  const scriptEvaluationError = app.scriptEvaluationErrors[idea.id] || "";
+  const scriptEvaluateButtonLabel = scriptEvaluating ? "Evaluating…" : idea.scriptEvaluation ? "Re-evaluate script" : "Evaluate script";
+  const scriptEvaluationCitedEntries = (idea.scriptEvaluation?.libraryEntryIds || [])
+    .map((id) => app.data.library.find((e) => e.id === id))
+    .filter((e): e is NonNullable<typeof e> => !!e);
+
   return (
-    <div style={{ background: "var(--color-surface)", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div
+      ref={setNodeRef}
+      style={{
+        background: "var(--color-surface)",
+        padding: 14,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+      }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span {...attributes} {...listeners} title="Drag to reorder or move columns" style={{ cursor: "grab", color: muted(45), fontSize: 13, padding: "0 2px", touchAction: "none" }}>
+          ⠿
+        </span>
         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-accent-700)" }}>
           {cat ? cat.name : "Uncategorized"}
         </span>
         <span style={{ fontSize: 10, background: "var(--color-neutral-100)", color: "var(--color-neutral-800)", padding: "2px 6px" }}>{idea.platform}</span>
         <div style={{ flex: 1 }} />
+        {idea.evaluation && <span style={{ fontSize: 10, background: "var(--color-neutral-100)", color: "var(--color-neutral-800)", padding: "2px 6px" }}>Evaluated</span>}
+        {idea.scriptEvaluation && <span style={{ fontSize: 10, background: "var(--color-neutral-100)", color: "var(--color-neutral-800)", padding: "2px 6px" }}>Script evaluated</span>}
         {idea.isDraft && <span style={{ fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-800)", padding: "2px 6px" }}>Draft</span>}
         <button onClick={() => app.deleteIdea(idea.id)} style={{ ...removeBtn, padding: "0 2px" }}>
           ×
@@ -92,16 +135,64 @@ function IdeaCard({ idea }: { idea: Idea }) {
           )}
           {citedEntries.length > 0 && (
             <div>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55), marginBottom: 4 }}>
-                Drew from library
-              </div>
-              {citedEntries.map((e) => (
-                <div key={e.id} style={{ fontSize: 11, color: muted(60), borderLeft: `2px solid ${muted(25)}`, paddingLeft: 6, marginTop: 4 }}>
-                  {e.text}
-                </div>
-              ))}
+              <button
+                onClick={() => setLibraryCollapsed((v) => !v)}
+                style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0, cursor: "pointer", marginBottom: libraryCollapsed ? 0 : 4 }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55) }}>
+                  {libraryCollapsed ? "+" : "−"} Drew from library
+                </span>
+              </button>
+              {!libraryCollapsed &&
+                citedEntries.map((e) => (
+                  <div key={e.id} style={{ fontSize: 11, color: muted(60), borderLeft: `2px solid ${muted(25)}`, paddingLeft: 6, marginTop: 4 }}>
+                    {e.text}
+                  </div>
+                ))}
             </div>
           )}
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderTop: `1px solid ${muted(25)}`, paddingTop: 8, marginTop: 2 }}>
+            {idea.evaluation ? (
+              <button
+                onClick={() => setEvaluationCollapsed((v) => !v)}
+                style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0, cursor: "pointer" }}
+              >
+                <span style={fieldLabel}>{evaluationCollapsed ? "+" : "−"} Evaluation</span>
+              </button>
+            ) : (
+              <div style={fieldLabel}>Evaluation</div>
+            )}
+            <button
+              onClick={() => app.evaluateIdea(idea.id)}
+              disabled={evaluating}
+              style={{ border: "1px solid var(--color-accent)", background: "transparent", color: "var(--color-accent-700)", padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+            >
+              {evaluateButtonLabel}
+            </button>
+          </div>
+          {idea.evaluation && !evaluationCollapsed && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ fontSize: 12, color: muted(75) }}>{idea.evaluation.reasoning}</div>
+              {evaluationCitedEntries.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55), marginTop: 4 }}>
+                    Judged against
+                  </div>
+                  {evaluationCitedEntries.map((e) => (
+                    <div key={e.id} style={{ fontSize: 11, color: muted(60), borderLeft: `2px solid ${muted(25)}`, paddingLeft: 6, marginTop: 4 }}>
+                      {e.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: muted(45) }}>
+                Evaluated {new Date(idea.evaluation.generatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              </div>
+            </div>
+          )}
+          {evaluationError && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{evaluationError}</div>}
+
           <div style={{ display: "flex", gap: 6 }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={fieldLabel}>Platform</div>
@@ -125,7 +216,6 @@ function IdeaCard({ idea }: { idea: Idea }) {
               >
                 <option value="idea">Idea</option>
                 <option value="scripted">Scripted</option>
-                <option value="filmed">Filmed</option>
                 <option value="posted">Posted</option>
               </select>
             </div>
@@ -201,6 +291,51 @@ function IdeaCard({ idea }: { idea: Idea }) {
             style={{ border: `1px solid ${muted(25)}`, background: "var(--color-bg)", fontSize: 12, color: "var(--color-text)", padding: "6px 8px", width: "100%" }}
           />
 
+          {idea.script && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderTop: `1px solid ${muted(25)}`, paddingTop: 8, marginTop: 2 }}>
+                {idea.scriptEvaluation ? (
+                  <button
+                    onClick={() => setScriptEvaluationCollapsed((v) => !v)}
+                    style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                  >
+                    <span style={fieldLabel}>{scriptEvaluationCollapsed ? "+" : "−"} Script evaluation</span>
+                  </button>
+                ) : (
+                  <div style={fieldLabel}>Script evaluation</div>
+                )}
+                <button
+                  onClick={() => app.evaluateScript(idea.id)}
+                  disabled={scriptEvaluating}
+                  style={{ border: "1px solid var(--color-accent)", background: "transparent", color: "var(--color-accent-700)", padding: "5px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                >
+                  {scriptEvaluateButtonLabel}
+                </button>
+              </div>
+              {idea.scriptEvaluation && !scriptEvaluationCollapsed && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ fontSize: 12, color: muted(75) }}>{idea.scriptEvaluation.reasoning}</div>
+                  {scriptEvaluationCitedEntries.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: muted(55), marginTop: 4 }}>
+                        Judged against
+                      </div>
+                      {scriptEvaluationCitedEntries.map((e) => (
+                        <div key={e.id} style={{ fontSize: 11, color: muted(60), borderLeft: `2px solid ${muted(25)}`, paddingLeft: 6, marginTop: 4 }}>
+                          {e.text}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: muted(45) }}>
+                    Evaluated {new Date(idea.scriptEvaluation.generatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  </div>
+                </div>
+              )}
+              {scriptEvaluationError && <div style={{ fontSize: 11, color: "var(--color-accent-800)" }}>{scriptEvaluationError}</div>}
+            </>
+          )}
+
           <div style={{ fontSize: 11, color: muted(50), borderTop: `1px solid ${muted(25)}`, paddingTop: 6 }}>{created}</div>
           {batch && siblings.length > 0 && (
             <div>
@@ -227,6 +362,31 @@ function IdeaCard({ idea }: { idea: Idea }) {
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+/** One board column — its own useDroppable target (for dropping into empty space) wrapping a SortableContext of its cards, so hooks aren't called inside the parent's .map(). */
+function BoardColumn({ col, items, boardPlatform }: { col: { status: IdeaStatus; label: string }; items: Idea[]; boardPlatform: "All" | "YouTube" | "IGTikTok" }) {
+  const app = useApp();
+  const { setNodeRef } = useDroppable({ id: col.status });
+  return (
+    <div ref={setNodeRef} style={{ flex: "1 1 380px", minWidth: 320, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid var(--color-divider)", paddingBottom: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text)" }}>{col.label}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 11, color: "var(--color-neutral-800)", background: "var(--color-neutral-100)", padding: "2px 8px" }}>{items.length}</span>
+          <ClearControl label={col.label} count={items.length} onConfirm={() => app.clearIdeas(col.status, boardPlatform)} small />
+        </div>
+      </div>
+      {items.length === 0 && (
+        <div style={{ fontSize: 13, color: muted(50), padding: 18, textAlign: "center", border: "1px solid var(--color-divider)" }}>No ideas here yet</div>
+      )}
+      <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+        {items.map((item) => (
+          <IdeaCard key={item.id} idea={item} />
+        ))}
+      </SortableContext>
     </div>
   );
 }
@@ -280,6 +440,50 @@ export function IdeasBoardTab() {
     return i.platform === "Instagram" || i.platform === "TikTok";
   });
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+    const activeId = String(active.id);
+    const dragged = app.data.ideas.find((i) => i.id === activeId);
+    if (!dragged) return;
+    const overId = String(over.id);
+
+    const targetStatus: IdeaStatus = COLUMNS.some((c) => c.status === overId)
+      ? (overId as IdeaStatus)
+      : app.data.ideas.find((i) => i.id === overId)?.status ?? dragged.status;
+    const sourceStatus = dragged.status;
+
+    // Resolve the drop position within the VISIBLE (platform-filtered) list the user actually
+    // dragged within, then apply that position when renumbering the FULL (unfiltered) column, so
+    // ideas hidden by the current platform filter keep a consistent order scale instead of always
+    // sorting after freshly-renumbered 0..n-1 values once the filter switches back to "All".
+    const visibleDest = (sourceStatus === targetStatus ? ideas.filter((i) => i.status === sourceStatus) : ideas.filter((i) => i.status === targetStatus))
+      .sort((a, b) => a.order - b.order)
+      .filter((i) => i.id !== activeId);
+    const overVisibleIdx = visibleDest.findIndex((i) => i.id === overId);
+    const insertBeforeId = overVisibleIdx >= 0 ? visibleDest[overVisibleIdx].id : null;
+
+    const fullSource = app.data.ideas.filter((i) => i.status === sourceStatus).sort((a, b) => a.order - b.order).filter((i) => i.id !== activeId);
+    const fullDest = sourceStatus === targetStatus ? fullSource : app.data.ideas.filter((i) => i.status === targetStatus).sort((a, b) => a.order - b.order);
+    const insertAt = insertBeforeId ? fullDest.findIndex((i) => i.id === insertBeforeId) : fullDest.length;
+    const newFullDest = [...fullDest.slice(0, insertAt), dragged, ...fullDest.slice(insertAt)];
+
+    const updates =
+      sourceStatus === targetStatus
+        ? newFullDest.map((i, idx) => ({ id: i.id, status: sourceStatus, order: idx }))
+        : [
+            ...fullSource.map((i, idx) => ({ id: i.id, status: sourceStatus, order: idx })),
+            ...newFullDest.map((i, idx) => ({ id: i.id, status: targetStatus, order: idx })),
+          ];
+
+    app.reorderIdeas(updates);
+  }
+
   return (
     <div>
       <h1 style={pageTitle}>Ideas board</h1>
@@ -294,28 +498,14 @@ export function IdeasBoardTab() {
         </div>
         <ClearControl label="board" count={ideas.length} onConfirm={() => app.clearIdeas("all", app.activeBoardPlatform)} />
       </div>
-      <div style={{ display: "flex", gap: 24, overflowX: "auto", paddingBottom: 12 }}>
-        {COLUMNS.map((col) => {
-          const items = ideas.filter((i) => i.status === col.status);
-          return (
-            <div key={col.status} style={{ width: 300, flexShrink: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid var(--color-divider)", paddingBottom: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-text)" }}>{col.label}</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 11, color: "var(--color-neutral-800)", background: "var(--color-neutral-100)", padding: "2px 8px" }}>{items.length}</span>
-                  <ClearControl label={col.label} count={items.length} onConfirm={() => app.clearIdeas(col.status, app.activeBoardPlatform)} small />
-                </div>
-              </div>
-              {items.length === 0 && (
-                <div style={{ fontSize: 13, color: muted(50), padding: 18, textAlign: "center", border: "1px solid var(--color-divider)" }}>No ideas here yet</div>
-              )}
-              {items.map((item) => (
-                <IdeaCard key={item.id} idea={item} />
-              ))}
-            </div>
-          );
-        })}
-      </div>
+      <DndContext sensors={sensors} collisionDetection={collisionDetectionStrategy} onDragEnd={handleDragEnd}>
+        <div style={{ display: "flex", gap: 24, overflowX: "auto", paddingBottom: 12 }}>
+          {COLUMNS.map((col) => {
+            const items = ideas.filter((i) => i.status === col.status).sort((a, b) => a.order - b.order);
+            return <BoardColumn key={col.status} col={col} items={items} boardPlatform={app.activeBoardPlatform} />;
+          })}
+        </div>
+      </DndContext>
     </div>
   );
 }

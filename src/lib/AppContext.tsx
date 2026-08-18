@@ -5,15 +5,14 @@ import { genId } from "./id";
 import { defaultSeed } from "./seed";
 import { loadSettings, empty as defaultSettings, type Settings } from "./settings";
 import {
-  buildAiGeneratePromptForCategory,
-  buildAiGeneratePromptGeneric,
+  buildEvaluatePrompt,
+  buildScriptEvaluatePrompt,
   buildScriptPrompt,
   buildSmartAiGeneratePromptForCategory,
   buildSmartAiGeneratePromptGeneric,
-  getGenerationPools,
 } from "./generation";
-import { complete, parseJsonArray, parseJsonObject } from "./ai";
-import { getModel, costUsd } from "./models";
+import { complete, parseJsonObject } from "./ai";
+import { getModel, costUsd, providerLabel } from "./models";
 import { loadUsageLog, type UsageLogEntry } from "./usage";
 import { loadTranscriptLog, loadTranscriptBackupLog } from "./transcriptUsage";
 import type { ApifyLogEntry } from "./apifyUsage";
@@ -44,7 +43,7 @@ function normalizeInspirationPlatform(i: Inspiration): InspirationPlatform {
   return "Instagram";
 }
 
-/** Backfills Category.platform / Inspiration.platform for data saved before those fields existed (or before Inspiration.platform was narrowed to just YouTube/IGTikTok, and later split back into a real 3-way YouTube/Instagram/TikTok value) — non-destructive, idempotent. Run on every load, not just migration, since already-migrated DB rows can predate this. */
+/** Backfills Category.platform / Inspiration.platform for data saved before those fields existed (or before Inspiration.platform was narrowed to just YouTube/IGTikTok, and later split back into a real 3-way YouTube/Instagram/TikTok value), and Idea.order for ideas saved before drag-and-drop reordering existed — non-destructive, idempotent. Run on every load, not just migration, since already-migrated DB rows can predate any of these fields. */
 function normalizePlatformGroups(data: AppData): AppData {
   return {
     ...data,
@@ -56,7 +55,15 @@ function normalizePlatformGroups(data: AppData): AppData {
       ...i,
       platform: normalizeInspirationPlatform(i),
     })),
+    ideas: (data.ideas || []).map((i) => (i.order !== undefined ? i : { ...i, order: i.createdAt })),
   };
+}
+
+/** Maps 1-indexed numeric library citation refs from an AI response onto real LibraryEntry.id values, deduping. Shared by generation (candidate.libraryEntryIds) and standalone evaluation (evaluation.libraryEntryIds). */
+function resolveLibraryRefs(refs: unknown, entries: LibraryEntry[]): string[] {
+  if (!Array.isArray(refs)) return [];
+  const ids = refs.map((n) => (typeof n === "number" ? entries[n - 1]?.id : undefined)).filter((id): id is string => !!id);
+  return Array.from(new Set(ids));
 }
 
 interface AiGenParsedItem {
@@ -68,6 +75,7 @@ interface AiGenParsedItem {
   structure?: string;
   platform?: Platform;
   libraryRefs?: number[];
+  concerns?: string;
 }
 
 /** One AI-generated candidate awaiting approval, before it becomes a real Idea. */
@@ -81,6 +89,7 @@ interface PendingCandidate {
   platform: Platform;
   categoryId: string;
   libraryEntryIds: string[];
+  concerns: string;
   approved: boolean;
 }
 
@@ -102,7 +111,6 @@ interface AppState {
   activeFrameworksPlatform: PlatformGroup;
   activeBoardPlatform: "All" | "YouTube" | "IGTikTok";
   genContext: string;
-  genSmartMode: boolean;
   genPendingBatch: PendingGenerationBatch | null;
   generating: boolean;
   genError: string;
@@ -113,8 +121,10 @@ interface AppState {
   scriptRegenOpenIds: Record<string, boolean>;
   scriptRegenNotes: Record<string, string>;
   expandedCategoryIds: Record<string, boolean>;
-  genFormatChecks: Record<string, boolean>;
-  genStructureChecks: Record<string, boolean>;
+  evaluatingIds: Record<string, boolean>;
+  evaluationErrors: Record<string, string>;
+  scriptEvaluatingIds: Record<string, boolean>;
+  scriptEvaluationErrors: Record<string, string>;
   settings: Settings;
   settingsOpen: boolean;
   usageLog: UsageLogEntry[];
@@ -134,7 +144,6 @@ function initialAppState(): AppState {
     activeFrameworksPlatform: "YouTube",
     activeBoardPlatform: "All",
     genContext: "",
-    genSmartMode: false,
     genPendingBatch: null,
     generating: false,
     genError: "",
@@ -145,8 +154,10 @@ function initialAppState(): AppState {
     scriptRegenOpenIds: {},
     scriptRegenNotes: {},
     expandedCategoryIds: {},
-    genFormatChecks: {},
-    genStructureChecks: {},
+    evaluatingIds: {},
+    evaluationErrors: {},
+    scriptEvaluatingIds: {},
+    scriptEvaluationErrors: {},
     settings: {
       anthropicApiKey: "",
       deepseekApiKey: "",
@@ -453,6 +464,7 @@ function useAppStore() {
         script: "",
         isDraft: true,
         createdAt: Date.now(),
+        order: Date.now(),
         ...partial,
       };
       setData((d) => ({ ...d, ideas: [idea, ...d.ideas] }));
@@ -466,6 +478,18 @@ function useAppStore() {
   );
   const setIdeaStatus = useCallback(
     (id: string, status: IdeaStatus) => setData((d) => ({ ...d, ideas: d.ideas.map((i) => (i.id === id ? { ...i, status } : i)) })),
+    [setData]
+  );
+  /** Batched write for drag-and-drop: applies a full set of status+order changes in one setData call rather than one write per moved card. */
+  const reorderIdeas = useCallback(
+    (updates: { id: string; status: IdeaStatus; order: number }[]) =>
+      setData((d) => ({
+        ...d,
+        ideas: d.ideas.map((i) => {
+          const u = updates.find((x) => x.id === i.id);
+          return u ? { ...i, status: u.status, order: u.order } : i;
+        }),
+      })),
     [setData]
   );
   const deleteIdea = useCallback((id: string) => setData((d) => ({ ...d, ideas: d.ideas.filter((i) => i.id !== id) })), [setData]);
@@ -496,26 +520,6 @@ function useAppStore() {
   const openRegenPanel = useCallback((id: string) => setState((s) => ({ ...s, scriptRegenOpenIds: { ...s.scriptRegenOpenIds, [id]: true } })), []);
   const closeRegenPanel = useCallback((id: string) => setState((s) => ({ ...s, scriptRegenOpenIds: { ...s.scriptRegenOpenIds, [id]: false } })), []);
   const setRegenNote = useCallback((id: string, value: string) => setState((s) => ({ ...s, scriptRegenNotes: { ...s.scriptRegenNotes, [id]: value } })), []);
-
-  // ---- format / structure checkboxes on Generate ----
-  const isFormatChecked = useCallback((id: string) => state.genFormatChecks[id] !== false, [state.genFormatChecks]);
-  const isStructureChecked = useCallback((id: string) => state.genStructureChecks[id] !== false, [state.genStructureChecks]);
-  const toggleFormatCheck = useCallback(
-    (id: string) => setState((s) => ({ ...s, genFormatChecks: { ...s.genFormatChecks, [id]: !(s.genFormatChecks[id] !== false) } })),
-    []
-  );
-  const toggleStructureCheck = useCallback(
-    (id: string) => setState((s) => ({ ...s, genStructureChecks: { ...s.genStructureChecks, [id]: !(s.genStructureChecks[id] !== false) } })),
-    []
-  );
-
-  const getPoolsFor = useCallback(
-    (cat: Category) => {
-      const scoped = !!(state.genCategory && state.genCategory !== "all");
-      return getGenerationPools(cat, scoped, state.genFormatChecks, state.genStructureChecks);
-    },
-    [state.genCategory, state.genFormatChecks, state.genStructureChecks]
-  );
 
   // ---- usage / cost tracking ----
   const logUsage = useCallback((entry: Omit<UsageLogEntry, "id" | "timestamp">) => {
@@ -554,8 +558,7 @@ function useAppStore() {
   // ---- generation ----
   const aiGenerate = useCallback(async () => {
     const d = state.data;
-    const smart = state.genSmartMode;
-    if (smart && !state.genContext.trim()) {
+    if (!state.genContext.trim()) {
       setState((s) => ({ ...s, genError: "Add a bit of context — rough is fine — so the AI can pick the right fit." }));
       return;
     }
@@ -569,50 +572,13 @@ function useAppStore() {
       const pickPlatform = (): Platform => (platformGroup === "YouTube" ? "YouTube" : "Instagram");
       const platformLabel = platformGroup === "YouTube" ? "YouTube" : "Instagram or TikTok";
 
-      const resolveLibraryRefs = (refs: unknown, entries: LibraryEntry[]): string[] => {
-        if (!Array.isArray(refs)) return [];
-        const ids = refs.map((n) => (typeof n === "number" ? entries[n - 1]?.id : undefined)).filter((id): id is string => !!id);
-        return Array.from(new Set(ids));
-      };
-
-      if (cat && !smart) {
-        const pools = getPoolsFor(cat);
-        const { prompt, slots } = buildAiGeneratePromptForCategory(d, cat, pools, platformLabel, state.genContext, rounds);
-        const { text, usage } = await complete({
-          model,
-          apiKeys,
-          prompt,
-          maxTokens: Math.min(4000, 500 + slots.length * 220),
-        });
-        logUsage({
-          feature: "generate",
-          provider: model.provider,
-          modelId: model.id,
-          modelLabel: model.label,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
-        });
-        const parsed = parseJsonArray(text) as AiGenParsedItem[] | null;
-        if (!parsed || !parsed.length) throw new Error("unexpected response format");
-        parsed.forEach((p, i) => {
-          const slot = slots[i] || slots[slots.length - 1];
-          addIdea({
-            title: p.title || (slot ? slot.formatName : "Untitled idea"),
-            hook: p.hook || "",
-            platform: pickPlatform(),
-            categoryId: cat.id,
-            notes: [p.notes || "", slot?.structureText ? "Structure: " + slot.structureText : ""].filter(Boolean).join(" — "),
-          });
-        });
-        setState((s) => ({ ...s, generating: false, justGenerated: true }));
-      } else if (cat && smart) {
+      if (cat) {
         const { prompt, libraryEntries } = buildSmartAiGeneratePromptForCategory(d, cat, platformLabel, state.genContext, rounds);
         const { text, usage } = await complete({
           model,
           apiKeys,
           prompt,
-          maxTokens: Math.min(4000, 500 + rounds * 260),
+          maxTokens: Math.min(4500, 500 + rounds * 300),
         });
         logUsage({
           feature: "generate",
@@ -638,6 +604,7 @@ function useAppStore() {
           platform: pickPlatform(),
           categoryId: cat.id,
           libraryEntryIds: resolveLibraryRefs(p.libraryRefs, libraryEntries),
+          concerns: p.concerns || "",
           approved: true,
         }));
         setState((s) => ({
@@ -645,36 +612,10 @@ function useAppStore() {
           generating: false,
           genPendingBatch: { batchName, candidates, categoryId: cat.id, platformGroup, context: state.genContext, max: rounds },
         }));
-      } else if (!cat && !smart) {
-        const catsInGroup = d.categories.filter((c) => c.platform === platformGroup);
-        const prompt = buildAiGeneratePromptGeneric(d, catsInGroup, getPoolsFor, platformLabel, state.genContext, rounds);
-        const { text, usage } = await complete({ model, apiKeys, prompt, maxTokens: 1800 });
-        logUsage({
-          feature: "generate",
-          provider: model.provider,
-          modelId: model.id,
-          modelLabel: model.label,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
-        });
-        const parsed = parseJsonArray(text) as AiGenParsedItem[] | null;
-        if (!parsed || !parsed.length) throw new Error("unexpected response format");
-        parsed.forEach((p) => {
-          const catMatch = catsInGroup.find((c) => c.name === p.category);
-          addIdea({
-            title: p.title || "Untitled idea",
-            hook: p.hook || "",
-            platform: (p as { platform?: Platform }).platform || pickPlatform(),
-            categoryId: catMatch ? catMatch.id : "",
-            notes: p.notes || "",
-          });
-        });
-        setState((s) => ({ ...s, generating: false, justGenerated: true }));
       } else {
         const catsInGroup = d.categories.filter((c) => c.platform === platformGroup);
         const { prompt, libraryEntries } = buildSmartAiGeneratePromptGeneric(d, catsInGroup, platformLabel, state.genContext, rounds);
-        const { text, usage } = await complete({ model, apiKeys, prompt, maxTokens: Math.min(3000, 500 + rounds * 220) });
+        const { text, usage } = await complete({ model, apiKeys, prompt, maxTokens: Math.min(3500, 500 + rounds * 260) });
         logUsage({
           feature: "generate",
           provider: model.provider,
@@ -701,6 +642,7 @@ function useAppStore() {
             platform: p.platform || pickPlatform(),
             categoryId: catMatch ? catMatch.id : "",
             libraryEntryIds: resolveLibraryRefs(p.libraryRefs, libraryEntries),
+            concerns: p.concerns || "",
             approved: true,
           };
         });
@@ -713,7 +655,7 @@ function useAppStore() {
     } catch (err) {
       setState((s) => ({ ...s, generating: false, genError: "Generation failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" }));
     }
-  }, [state.data, state.genCategory, state.genPlatformGroup, state.genContext, state.genSmartMode, state.settings.anthropicApiKey, state.settings.deepseekApiKey, getPoolsFor, addIdea, logUsage]);
+  }, [state.data, state.genCategory, state.genPlatformGroup, state.genContext, state.settings.anthropicApiKey, state.settings.deepseekApiKey, logUsage]);
 
   // ---- pending generation batch review ----
   const toggleCandidateApproval = useCallback((tempId: string) => {
@@ -737,7 +679,7 @@ function useAppStore() {
       if (!approved.length) return { ...s, genPendingBatch: null };
       const batchId = genId();
       const now = Date.now();
-      const newIdeas: Idea[] = approved.map((c) => ({
+      const newIdeas: Idea[] = approved.map((c, i) => ({
         id: genId(),
         title: c.title,
         hook: c.hook,
@@ -749,9 +691,13 @@ function useAppStore() {
         script: "",
         isDraft: true,
         createdAt: now,
+        order: now + i,
         format: c.format || undefined,
         structure: c.structure || undefined,
         libraryEntryIds: c.libraryEntryIds.length ? c.libraryEntryIds : undefined,
+        evaluation: c.concerns
+          ? { reasoning: c.concerns, libraryEntryIds: c.libraryEntryIds.length ? c.libraryEntryIds : undefined, generatedAt: now }
+          : undefined,
         batchId,
       }));
       const batch: GenerationBatch = {
@@ -807,6 +753,112 @@ function useAppStore() {
     [state.data, state.settings.anthropicApiKey, state.settings.deepseekApiKey, setData, logUsage]
   );
 
+  /** Critiques a single idea already on the board — standalone, opt-in, its own AI call. Errors surface per-id on the card itself (evaluationErrors), not the global genError which only renders on the Generate tab. Writes its result via setData directly, never updateIdea, so idea.isDraft is never touched as a side effect. */
+  const evaluateIdea = useCallback(
+    async (id: string) => {
+      const d = state.data;
+      const idea = d.ideas.find((i) => i.id === id);
+      if (!idea) return;
+      const model = getModel(d.aiModel);
+      const hasKey = model.provider === "anthropic" ? !!state.settings.anthropicApiKey : !!state.settings.deepseekApiKey;
+      if (!hasKey) {
+        setState((s) => ({ ...s, evaluationErrors: { ...s.evaluationErrors, [id]: `Add your ${providerLabel(model.provider)} API key in Settings first.` } }));
+        return;
+      }
+      setState((s) => ({ ...s, evaluatingIds: { ...s.evaluatingIds, [id]: true }, evaluationErrors: { ...s.evaluationErrors, [id]: "" } }));
+      try {
+        const cat = d.categories.find((c) => c.id === idea.categoryId);
+        const { prompt, libraryEntries } = buildEvaluatePrompt(d, idea, cat);
+        const { text, usage } = await complete({
+          model,
+          apiKeys: { anthropicApiKey: state.settings.anthropicApiKey, deepseekApiKey: state.settings.deepseekApiKey },
+          prompt,
+          maxTokens: 500,
+        });
+        logUsage({
+          feature: "evaluate-idea",
+          provider: model.provider,
+          modelId: model.id,
+          modelLabel: model.label,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+        });
+        const obj = parseJsonObject(text);
+        const reasoning = obj && typeof obj.reasoning === "string" ? obj.reasoning.trim() : "";
+        if (!reasoning) throw new Error("unexpected response format");
+        const libraryEntryIds = resolveLibraryRefs(obj!.libraryRefs, libraryEntries);
+        setData((cur) => ({
+          ...cur,
+          ideas: cur.ideas.map((i) =>
+            i.id === id ? { ...i, evaluation: { reasoning, libraryEntryIds: libraryEntryIds.length ? libraryEntryIds : undefined, generatedAt: Date.now() } } : i
+          ),
+        }));
+        setState((s) => ({ ...s, evaluatingIds: { ...s.evaluatingIds, [id]: false } }));
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          evaluatingIds: { ...s.evaluatingIds, [id]: false },
+          evaluationErrors: { ...s.evaluationErrors, [id]: "Evaluation failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" },
+        }));
+      }
+    },
+    [state.data, state.settings.anthropicApiKey, state.settings.deepseekApiKey, setData, logUsage]
+  );
+
+  /** Critiques the actual script content of a single idea already on the board — standalone, opt-in, its own AI call, structurally identical to evaluateIdea but targets idea.scriptEvaluation and only runs once a script exists. Errors surface per-id (scriptEvaluationErrors), never the global genError. Writes via setData directly, never updateIdea, so idea.isDraft is never touched as a side effect. */
+  const evaluateScript = useCallback(
+    async (id: string) => {
+      const d = state.data;
+      const idea = d.ideas.find((i) => i.id === id);
+      if (!idea || !idea.script.trim()) return;
+      const model = getModel(d.aiModel);
+      const hasKey = model.provider === "anthropic" ? !!state.settings.anthropicApiKey : !!state.settings.deepseekApiKey;
+      if (!hasKey) {
+        setState((s) => ({ ...s, scriptEvaluationErrors: { ...s.scriptEvaluationErrors, [id]: `Add your ${providerLabel(model.provider)} API key in Settings first.` } }));
+        return;
+      }
+      setState((s) => ({ ...s, scriptEvaluatingIds: { ...s.scriptEvaluatingIds, [id]: true }, scriptEvaluationErrors: { ...s.scriptEvaluationErrors, [id]: "" } }));
+      try {
+        const cat = d.categories.find((c) => c.id === idea.categoryId);
+        const { prompt, libraryEntries } = buildScriptEvaluatePrompt(d, idea, cat);
+        const { text, usage } = await complete({
+          model,
+          apiKeys: { anthropicApiKey: state.settings.anthropicApiKey, deepseekApiKey: state.settings.deepseekApiKey },
+          prompt,
+          maxTokens: 500,
+        });
+        logUsage({
+          feature: "evaluate-script",
+          provider: model.provider,
+          modelId: model.id,
+          modelLabel: model.label,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: costUsd(model, usage.inputTokens, usage.outputTokens),
+        });
+        const obj = parseJsonObject(text);
+        const reasoning = obj && typeof obj.reasoning === "string" ? obj.reasoning.trim() : "";
+        if (!reasoning) throw new Error("unexpected response format");
+        const libraryEntryIds = resolveLibraryRefs(obj!.libraryRefs, libraryEntries);
+        setData((cur) => ({
+          ...cur,
+          ideas: cur.ideas.map((i) =>
+            i.id === id ? { ...i, scriptEvaluation: { reasoning, libraryEntryIds: libraryEntryIds.length ? libraryEntryIds : undefined, generatedAt: Date.now() } } : i
+          ),
+        }));
+        setState((s) => ({ ...s, scriptEvaluatingIds: { ...s.scriptEvaluatingIds, [id]: false } }));
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          scriptEvaluatingIds: { ...s.scriptEvaluatingIds, [id]: false },
+          scriptEvaluationErrors: { ...s.scriptEvaluationErrors, [id]: "Evaluation failed — try again. (" + (err instanceof Error ? err.message : "unknown error") + ")" },
+        }));
+      }
+    },
+    [state.data, state.settings.anthropicApiKey, state.settings.deepseekApiKey, setData, logUsage]
+  );
+
   // ---- tabs ----
   const setActiveTab = useCallback((tab: TabId) => setState((s) => ({ ...s, activeTab: tab })), []);
   const goToBoard = useCallback(() => setState((s) => ({ ...s, activeTab: "ideas", justGenerated: false })), []);
@@ -814,15 +866,11 @@ function useAppStore() {
   // ---- generate controls ----
   const setAiModel = useCallback((modelId: string) => setData((d) => ({ ...d, aiModel: modelId })), [setData]);
   const setGenBatchSize = useCallback((v: number) => setData((d) => ({ ...d, genBatchSize: v })), [setData]);
-  const setGenCategory = useCallback((id: string) => setState((s) => ({ ...s, genCategory: id, genFormatChecks: {}, genStructureChecks: {} })), []);
-  const setGenPlatformGroup = useCallback(
-    (p: PlatformGroup) => setState((s) => ({ ...s, genPlatformGroup: p, genCategory: "all", genFormatChecks: {}, genStructureChecks: {} })),
-    []
-  );
+  const setGenCategory = useCallback((id: string) => setState((s) => ({ ...s, genCategory: id })), []);
+  const setGenPlatformGroup = useCallback((p: PlatformGroup) => setState((s) => ({ ...s, genPlatformGroup: p, genCategory: "all" })), []);
   const setActiveFrameworksPlatform = useCallback((p: PlatformGroup) => setState((s) => ({ ...s, activeFrameworksPlatform: p })), []);
   const setActiveBoardPlatform = useCallback((p: "All" | "YouTube" | "IGTikTok") => setState((s) => ({ ...s, activeBoardPlatform: p })), []);
   const setGenContext = useCallback((v: string) => setState((s) => ({ ...s, genContext: v })), []);
-  const setGenSmartMode = useCallback((v: boolean) => setState((s) => ({ ...s, genSmartMode: v })), []);
 
   // ---- export / import ----
   const exportJSON = useCallback(() => {
@@ -980,6 +1028,7 @@ function useAppStore() {
     addIdea,
     updateIdea,
     setIdeaStatus,
+    reorderIdeas,
     deleteIdea,
     clearIdeas,
     toggleIdeaExpand,
@@ -988,17 +1037,14 @@ function useAppStore() {
     openRegenPanel,
     closeRegenPanel,
     setRegenNote,
-    isFormatChecked,
-    isStructureChecked,
-    toggleFormatCheck,
-    toggleStructureCheck,
-    getPoolsFor,
     aiGenerate,
     toggleCandidateApproval,
     setAllCandidatesApproved,
     discardPendingBatch,
     commitGenerationBatch,
     generateScript,
+    evaluateIdea,
+    evaluateScript,
     setActiveTab,
     goToBoard,
     setAiModel,
@@ -1008,7 +1054,6 @@ function useAppStore() {
     setActiveFrameworksPlatform,
     setActiveBoardPlatform,
     setGenContext,
-    setGenSmartMode,
     exportJSON,
     importJSON,
     updateSettings,
